@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<psalm errorLevel="8">
+  <projectFiles>
+    <directory name="."/>
+    <ignoreFiles>
+    </ignoreFiles>
+  </projectFiles>
+  <enableExtensions>
+    <extension name="pdo"/>
+    <extension name="mysqli"/>
+  </enableExtensions>
+  <stubs>
+    <file name="$PSALM_STUBS/defs.php"/>
+  </stubs>
+  <plugins>
+    <plugin filename="$PSALM_PLUGINS/globalVarTainter.php"/>
+  </plugins>
+</psalm>
