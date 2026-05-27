@@ -239,7 +239,7 @@
  * This rule covers WHO is allowed to trigger any output at all.
  */
 
-namespace Test\MissingGuards;
+namespace $NAMESPACE;
 
 use PhpParser\Node\Stmt\Expression;
 use PHPStan\Analyser\Scope;

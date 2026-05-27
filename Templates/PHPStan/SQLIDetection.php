@@ -37,7 +37,7 @@
  * - Stage 2: Psalm taint analysis filters false positives
  */
 
-namespace Test\SQLI;
+namespace $NAMESPACE;
 
 use PhpParser\Node;
 use PhpParser\Node\Expr\MethodCall;

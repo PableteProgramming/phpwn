@@ -40,7 +40,7 @@
  * - Stage 2: Psalm taint analysis filters false positives
  */
 
-namespace Test\XSS;
+namespace $NAMESPACE;
 
 use PhpParser\Node;
 use PhpParser\Node\Expr\Variable;

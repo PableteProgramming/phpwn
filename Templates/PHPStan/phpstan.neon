@@ -1,0 +1,12 @@
+parameters:
+    bootstrapFiles:
+# BOOTSTRAP_PLACEHOLDER
+    paths:
+        - .
+    excludePaths:
+# EXCLUDE_PLACEHOLDER
+    level: 9
+    reportUnmatchedIgnoredErrors: false
+
+rules:
+# RULES_PLACEHOLDER
