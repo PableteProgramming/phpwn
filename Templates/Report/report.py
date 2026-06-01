@@ -170,6 +170,13 @@ class FullReport(Report):
         accessibleFiles=AccessibleFilesReport(self.phpStanOutput,self.codeCheckerOutput,self.baseName).report()
         sqliOutput=SQLIReport(self.psalmOutput).report()
         xssOutput=XSSReport(self.psalmOutput).report()
+        
+        if not accessibleFiles:
+            accessibleFiles=""
+        if not sqliOutput:
+            sqliOutput=""
+        if not xssOutput:
+            xssOutput=""
         self.__output= accessibleFiles+sqliOutput+xssOutput
         return self.__output
     
