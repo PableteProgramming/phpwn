@@ -1,6 +1,6 @@
 parameters:
-    bootstrapFiles:
-# BOOTSTRAP_PLACEHOLDER
+    scanDirectories:
+# SCANDIR_PLACEHOLDER
     paths:
         - .
     excludePaths:
