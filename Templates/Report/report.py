@@ -172,11 +172,11 @@ class FullReport(Report):
         xssOutput=XSSReport(self.psalmOutput).report()
         
         if not accessibleFiles:
-            accessibleFiles=""
+            accessibleFiles=[]
         if not sqliOutput:
-            sqliOutput=""
+            sqliOutput=[]
         if not xssOutput:
-            xssOutput=""
+            xssOutput=[]
         self.__output= accessibleFiles+sqliOutput+xssOutput
         return self.__output
     
