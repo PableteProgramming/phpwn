@@ -11,6 +11,7 @@
 $skipDirs= [];
 $safePatterns = [];
 $inputPatterns = [];
+$psalmPluginsDir="";
 
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Node;
@@ -276,4 +277,6 @@ foreach($globalsTypes as $var => $type){
 $psalmParser= new PsalmXMLConfig("psalm.xml");
 $psalmParser->update($safeGlobs);
 
-modifyPlugin("./psalm/plugins/globalVarTainter.php",$inputs);
+modifyPlugin($psalmPluginsDir,$inputs);
+
+echo "[+] Done".

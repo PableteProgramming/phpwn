@@ -10,9 +10,7 @@
     <extension name="mysqli"/>
   </enableExtensions>
   <stubs>
-    <file name="$PSALM_STUBS/defs.php"/>
   </stubs>
   <plugins>
-    <plugin filename="$PSALM_PLUGINS/globalVarTainter.php"/>
   </plugins>
 </psalm>

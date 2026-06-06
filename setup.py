@@ -1,0 +1,273 @@
+'''
+This script is the one that is going to configure everything before letting the analysis run.
+This are the steps done by this script:
+    - Parse command line args for variables
+    - Create necessary temporary dirs
+    - Copy the source code to analyze into it
+    - Copy all the Psalm stuff into the directory
+        - Replace important parts like ingoreFiles entries, and psalm stubs and plugin files
+        - Replace needed variables for preprocess.php (EXCLUDE_DIR,SAFE_PATTERNS,INPUT_PATTERS)
+        - Install psalm
+        - Run preprocess.php
+    - Copy all the PHPStan stuff into it
+        - Install PHPStan
+        - Copy all the necessary files
+        - Replace Exclude dirs to phpstan
+        - Add the custom rules to phpstan.neon
+        - Configure custom rules in composer.json
+        - Fix namespaces into the rules
+'''
+import argparse
+import shutil
+import os
+from lxml import etree
+import re
+import subprocess
+from pathlib import Path
+import json
+
+TEMPLATE_DIR="Templates"
+PSALM_DIR="psalm"
+PSALM_STUB_DIR="stubs"
+PSALM_PLUGIN_DIR="plugins"
+PHPSTAN_DIR="phpstan"
+PHPSTAN_RULES_DIR="rules"
+
+def addXml(filename,inTag,tag,values):
+    try:
+        tree= etree.parse(filename)
+    except OSError:
+        print(f"[!] Could not open {filename}")
+        return False
+    except etree.XMLSyntaxError:
+        print(f"[!] Could not parse {filename} — invalid XML")
+        return False
+        
+    root= tree.getroot()
+    foundTag= root.find(inTag)
+    for v in values:
+        entry= etree.SubElement(foundTag,tag)
+        for key,value in v.items():
+            entry.set(key,value)
+    etree.indent(tree, space="\t")
+    tree.write(filename,pretty_print=True, xml_declaration=True, encoding="UTF-8")
+    return True
+
+def parseArgs():
+    parser = argparse.ArgumentParser(description="The PHPwn setup script.")
+    # Required positional argument
+    parser.add_argument("src_dir", help="The source directory to analyze.")
+    parser.add_argument("out_dir", help="The output directory.")
+    # Optional flags
+    parser.add_argument("--excludes", "-e", nargs="+", default=[], help="Directories to skip.")
+    parser.add_argument("--safe-patterns", "-s", nargs="+", default=[], help="Patterns for safe variables.")
+    parser.add_argument("--input-patterns", "-i", nargs="+", default=[], help="Patterns for input variables.")
+    args= parser.parse_args()
+    return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.input_patterns
+
+def buildPhpArray(elements):
+    return ", ".join(f"'{elem}'" for elem in elements)
+
+def appendToPhpFile(filename,var,value):
+    try:
+        f = open(filename,"r")
+        content= f.read()
+        f.close()
+        content= re.sub(rf'\${var}\s*=\s*.*?;',f'${var} = {value}',content)
+        f = open(filename,"w")
+        f.write(content)
+        f.close()
+    except Exception as e:
+        print(f"An error ocurred while trying to open {filename}: {e}")
+        return False
+    return True
+        
+def runCommand(command,wd):
+    try:
+        result= subprocess.run(command,cwd=wd,capture_output=True,text=True)
+    except FileNotFoundError:
+        print(f"[!] {command[0]} not found !")
+        return None,None
+    return "" if not result.stdout else result.stdout, "" if not result.stderr else result.stderr
+
+def replaceInFile(filename,pattern,replacement):
+    try:
+        f= open(filename,"r")
+        content= f.read()
+        f.close()
+        content= content.replace(pattern,replacement)
+        f= open(filename,"w")
+        f.write(content)
+        f.close()
+        return True
+    except Exception as e:
+        print(f"An error ocurred while opening {filename}: {e}")
+        return False
+
+def updateComposer(filename,namespace,dir):
+    try:
+        f= open(filename,"r")
+        content= json.load(f)
+        f.close()
+        if "autoload-dev" not in content:
+            content["autoload-dev"]={}
+        if "psr-4" not in content["autoload-dev"]:
+            content["autoload-dev"]["psr-4"]={}
+        content["autoload-dev"]["psr-4"][namespace]= dir
+        f= open(filename,"w")
+        json.dump(content,f,indent=4)
+        f.write("\n")
+        f.close()
+        return True
+    except Exception as e:
+        print(f"An error ocurred while opening and parsing {filename}: {e}")
+        return False
+        
+def setup():
+    srcDir, outDir, excludes, safePatterns, inputPatterns = parseArgs()
+    # we first copy the source dir into the temp dir
+    print(f"[+] Creating {outDir} and copying source code")
+    try:
+        shutil.rmtree(outDir)
+    except FileNotFoundError as e:
+        pass
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    
+    srcBaseName= os.path.basename(srcDir)
+    srcPath= os.path.join(outDir,srcBaseName)
+    shutil.copytree(srcDir,srcPath)
+    
+    print(f"[+] Copying all Psalm important setup files")
+    # Copy Psalm stuff now
+    psalmTemplatesDir= os.path.join(TEMPLATE_DIR,"Psalm")
+    shutil.copy(os.path.join(psalmTemplatesDir,"psalm.xml"),os.path.join(srcPath,"psalm.xml"))
+    psalmDir= os.path.join(srcPath,PSALM_DIR)
+    psalmStubsDir=os.path.join(psalmDir,PSALM_STUB_DIR)
+    psalmPluginsDir=os.path.join(psalmDir,PSALM_PLUGIN_DIR)
+    os.mkdir(psalmDir)
+    os.mkdir(psalmStubsDir)
+    os.mkdir(psalmPluginsDir)
+    shutil.copy(os.path.join(psalmTemplatesDir,"defs.php"),psalmStubsDir)
+    shutil.copy(os.path.join(psalmTemplatesDir,"globalVarTainter.php"),psalmPluginsDir)
+    shutil.copy(os.path.join(psalmTemplatesDir,"preprocess.php"),srcPath)
+    
+    # Applying exclude dirs to psalm.xml
+    entries=[]
+    for filename in excludes:
+        entries.append({"name":filename})
+        
+    if addXml(os.path.join(srcPath,"psalm.xml"),"projectFiles/ignoreFiles","directory",entries):
+        print(f"[+] Excludes where appended to psalm.xml")
+    else:
+        print(f"An error occurred while trying to append excludes to psalm.xml")
+        return False
+    
+    if addXml(os.path.join(srcPath,"psalm.xml"),"stubs","file",[{"name":os.path.join(PSALM_DIR,PSALM_STUB_DIR,"defs.php")}]):
+        print(f"[+] Stubs where appended to psalm.xml")
+    else:
+        print(f"An error occurred while trying to append stubs to psalm.xml")
+        return False
+    
+    if addXml(os.path.join(srcPath,"psalm.xml"),"plugins","plugin",[{"name":os.path.join(PSALM_DIR,PSALM_PLUGIN_DIR,"globalVarTainter.php")}]):
+        print(f"[+] Plugins where appended to psalm.xml")
+    else:
+        print(f"An error occurred while trying to append plugins to psalm.xml")
+        return False
+    
+    if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"skipDirs",f"[{buildPhpArray(excludes)}];"):
+        print(f"[+] Excludes where appended to preprocess.php")
+    else:
+        print(f"An error occurred while trying to append safe patterns to preprocess.php")
+        return False
+    
+    if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"safePatterns",f"[{buildPhpArray(safePatterns)}];"):
+        print(f"[+] Safe patterns where appended to preprocess.php")
+    else:
+        print(f"An error occurred while trying to append safe patterns to preprocess.php")
+        return False
+    
+    if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"inputPatterns",f"[{buildPhpArray(inputPatterns)}];"):
+        print(f"[+] Input patterns where appended to preprocess.php")
+    else:
+        print(f"An error occurred while trying to append safe patterns to preprocess.php")
+        return False
+    
+    if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"psalmPluginsDir",f'"{os.path.join(PSALM_DIR,PSALM_PLUGIN_DIR,"globalVarTainter.php")}";'):
+        print(f"[+] psalm variable where appended to preprocess.php")
+    else:
+        print(f"An error occurred while trying to append psalm variable to preprocess.php")
+        return False
+    
+    print("[+] Installing Psalm")
+    out,err=runCommand(["composer", "require", "--dev","vimeo/psalm"],srcPath)
+    if out is None and err is None:
+        return False
+    
+    print("[+] Running preprocess.php")
+    out,err=runCommand(["php", "preprocess.php"],srcPath)
+    if out is None and err is None:
+        return False
+    
+    # now copying all necessary PHPStan 
+    print("[+] Copying all necessary PHPStan setup files")
+    phptanDir=os.path.join(srcPath,PHPSTAN_DIR)
+    phpstanRulesDir= os.path.join(phptanDir,PHPSTAN_RULES_DIR)
+    os.mkdir(phptanDir)
+    os.mkdir(phpstanRulesDir)
+    for file in Path(os.path.join(TEMPLATE_DIR,"PHPStan")).glob("*.php"):
+        shutil.copy(file, os.path.join(phpstanRulesDir,file.name))
+        
+    shutil.copy(os.path.join(TEMPLATE_DIR,"PHPStan","phpstan.neon"),os.path.join(srcPath,"phpstan.neon"))
+    
+    print("[+] Applying excludes and custom Rules to phpstan.neon")
+    excludesBlock="\n".join([f"        - {d}" for d in excludes])
+    if replaceInFile(os.path.join(srcPath,"phpstan.neon"),"# EXCLUDE_PLACEHOLDER",excludesBlock):
+        print("[+] excludes replaced successfully")
+    else:
+        print("An error ocurred while writing excludes to phpstan.neon")
+        
+    if replaceInFile(os.path.join(srcPath,"phpstan.neon"),"# SCANDIR_PLACEHOLDER",f"        - {os.path.join(PHPSTAN_DIR,PHPSTAN_RULES_DIR)}"):
+        print("[+] scanDir replaced successfully")
+    else:
+        print("An error ocurred while writing scanDir to phpstan.neon")
+        
+    base= re.sub(r'[^a-zA-Z0-9]','',srcBaseName.rstrip("/\\"))
+    namespace= (base[0].upper() + base[1:] if base else base) + "\\PHPStan\\"
+    rulesBlock="\n".join([f"    - {namespace}{PHPSTAN_RULES_DIR}\\{Path(f).stem}" for f in Path(phpstanRulesDir).iterdir() if f.is_file()])
+    if replaceInFile(os.path.join(srcPath,"phpstan.neon"),"# RULES_PLACEHOLDER",rulesBlock):
+        print("[+] rules replaced successfully")
+    else:
+        print("An error append while writing rules to phpstan.neon")
+        
+    if updateComposer(os.path.join(srcPath,"composer.json"),namespace,PHPSTAN_DIR+"/"):
+        print("[+] composer.json got updated")
+    else:
+        print("An error ocurred while updating composer.json")
+        
+    print("[+] Running dump-autoload")
+    out,err=runCommand(["composer", "dump-autoload"],srcPath)
+    if out is None and err is None:
+        return False
+    
+    # Now, fixing the namespaces in the .php rules
+    for f in Path(phpstanRulesDir).iterdir():
+        if f.is_file():
+            if replaceInFile(os.path.join(phpstanRulesDir,os.path.basename(f)),"namespace $NAMESPACE;",f"namespace {namespace}{PHPSTAN_RULES_DIR};"):
+                print(f"[+] namespace replaced successfully in {f}")
+            else:
+                print("An error append while replacing namespaces in the rules")
+                return False 
+            
+    print("[+] Installing PHPStan")
+    out,err=runCommand(["composer", "require", "--dev","phpstan/phpstan"],srcPath)
+    if out is None and err is None:
+        return False
+    
+    return True
+    
+if __name__=="__main__":
+    if not setup():
+        print(f"[!] An error ocurred during setup")
+    else:
+        print("[+] Setup done !")
