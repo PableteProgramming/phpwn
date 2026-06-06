@@ -279,4 +279,4 @@ $psalmParser->update($safeGlobs);
 
 modifyPlugin($psalmPluginsDir,$inputs);
 
-echo "[+] Done".
+echo "[+] Done";

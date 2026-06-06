@@ -2,13 +2,21 @@ import json
 from abc import ABC, abstractmethod
 import csv
 import io
+import argparse
+import os
 
-BASENAME="$BASENAME"
-PHPSTAN_OUTPUT="$PHPSTAN_OUTPUT"
-PSALM_OUTPUT="$PSALM_OUTPUT"
-CODECHECKER_OUTPUT="$CODECHECKER_OUTPUT"
-OUTPUT_CSV="$OUTPUT_CSV"
-OUTPUT_JSON="$OUTPUT_JSON"
+def parseArgs():
+    parser = argparse.ArgumentParser(description="The PHPwn report script.")
+     # Required positional argument
+    parser.add_argument("src_dir", help="The source directory to analyze.")
+    parser.add_argument("psalm_output", help="The filename of the psalm results.")
+    parser.add_argument("phpstan_output", help="The filename of the phpstan results.")
+    parser.add_argument("codechecker_output", help="The filename of the codebaseChecker results.")
+    # Optional flags
+    parser.add_argument("--output-json", "-j", type=str, default="result.json", help="Report filename for json format")
+    parser.add_argument("--output-csv", "-c", type=str, default="result.csv", help="Report filename for CSV format")
+    args= parser.parse_args()
+    return args.src_dir,args.psalm_output,args.phpstan_output,args.codechecker_output,args.output_json,args.output_csv
 
 # Each Report type must implement the report and __str__ method.
 class Report(ABC):
@@ -249,6 +257,8 @@ class Formatter:
             return False,f"Format {self.type} not supported !"
             
 
+SRC_DIR,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODECHECKER_OUTPUT,OUTPUT_JSON,OUTPUT_CSV=parseArgs()
+BASENAME=os.path.basename(SRC_DIR)
 report= FullReport(PHPSTAN_OUTPUT,PSALM_OUTPUT,CODECHECKER_OUTPUT,BASENAME).report()
 Formatter("csv").format(report,OUTPUT_CSV)
 Formatter("json").format(report,OUTPUT_JSON)

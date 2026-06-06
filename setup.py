@@ -16,6 +16,8 @@ This are the steps done by this script:
         - Add the custom rules to phpstan.neon
         - Configure custom rules in composer.json
         - Fix namespaces into the rules
+    - Copy codebaseChecker.py stuff
+    - Copy report.py
 '''
 import argparse
 import shutil
@@ -125,6 +127,9 @@ def updateComposer(filename,namespace,dir):
         
 def setup():
     srcDir, outDir, excludes, safePatterns, inputPatterns = parseArgs()
+    
+    excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR])
+    
     # we first copy the source dir into the temp dir
     print(f"[+] Creating {outDir} and copying source code")
     try:
@@ -157,10 +162,19 @@ def setup():
     for filename in excludes:
         entries.append({"name":filename})
         
-    if addXml(os.path.join(srcPath,"psalm.xml"),"projectFiles/ignoreFiles","directory",entries):
-        print(f"[+] Excludes where appended to psalm.xml")
+    excludesFiles=[f for f in entries if Path(os.path.join(srcPath,f["name"])).is_file()]
+    excludesDirs=[f for f in entries if f not in excludesFiles]
+        
+    if addXml(os.path.join(srcPath,"psalm.xml"),"projectFiles/ignoreFiles","file",excludesFiles):
+        print(f"[+] Excludes files where appended to psalm.xml")
     else:
-        print(f"An error occurred while trying to append excludes to psalm.xml")
+        print(f"An error occurred while trying to append excludes files to psalm.xml")
+        return False
+    
+    if addXml(os.path.join(srcPath,"psalm.xml"),"projectFiles/ignoreFiles","directory",excludesDirs):
+        print(f"[+] Excludes dirs where appended to psalm.xml")
+    else:
+        print(f"An error occurred while trying to append excludes dirs to psalm.xml")
         return False
     
     if addXml(os.path.join(srcPath,"psalm.xml"),"stubs","file",[{"name":os.path.join(PSALM_DIR,PSALM_STUB_DIR,"defs.php")}]):
@@ -169,7 +183,7 @@ def setup():
         print(f"An error occurred while trying to append stubs to psalm.xml")
         return False
     
-    if addXml(os.path.join(srcPath,"psalm.xml"),"plugins","plugin",[{"name":os.path.join(PSALM_DIR,PSALM_PLUGIN_DIR,"globalVarTainter.php")}]):
+    if addXml(os.path.join(srcPath,"psalm.xml"),"plugins","plugin",[{"filename":os.path.join(PSALM_DIR,PSALM_PLUGIN_DIR,"globalVarTainter.php")}]):
         print(f"[+] Plugins where appended to psalm.xml")
     else:
         print(f"An error occurred while trying to append plugins to psalm.xml")
@@ -264,6 +278,8 @@ def setup():
     if out is None and err is None:
         return False
     
+    shutil.copy(os.path.join(TEMPLATE_DIR,"CodebaseCheck","codebaseCheck.py"),os.path.join(srcPath,"codebaseCheck.py"))
+    shutil.copy(os.path.join(TEMPLATE_DIR,"Report","report.py"),os.path.join(outDir,"report.py"))
     return True
     
 if __name__=="__main__":
