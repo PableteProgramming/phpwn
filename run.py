@@ -30,22 +30,35 @@ def parseArgs():
     args= parser.parse_args()
     return args.src_dir,args.out_dir,args.output_json,args.output_csv,args.direct_serving
 
-def runCommand(command,wd):
+def runCommandOrFail(command,wd,allowCodes=[0],output=False):
     try:
         result= subprocess.run(command,cwd=wd,capture_output=True,text=True)
+        if result.returncode not in allowCodes:
+            print(f"stdout: {result.stdout}")
+            print(f"stderr: {result.stderr}")
+            print(f"return code: {result.returncode}")
+            if output:
+                return False,""
+            else:
+                return False
+        if output:
+            return True,result.stdout
+        else:
+            return True
     except FileNotFoundError:
         print(f"[!] {command[0]} not found !")
-        return None,None
-    return "" if not result.stdout else result.stdout, "" if not result.stderr else result.stderr
-
+        if output:
+            return False,""
+        else:
+            return False
 
 def run():
     srcDir,outDir,outputJson,outputCsv,directServing= parseArgs()
     srcPath= os.path.join(outDir,os.path.basename(srcDir))
     
     print("[+] Running Psalm. This may take a while...")
-    out,err=runCommand(["vendor/bin/psalm", "--taint-analysis", "--no-cache","--output-format=json"],srcPath)
-    if out is None and err is None:
+    ok,out=runCommandOrFail(["vendor/bin/psalm", "--taint-analysis", "--no-cache","--output-format=json"],srcPath,[0,2],output=True)
+    if not ok:
         return False
     
     try:
@@ -59,8 +72,8 @@ def run():
         return False
     
     print("[+] Running PHPStan. This may take a while...")
-    out,err=runCommand(["vendor/bin/phpstan", "analyse", "--no-progress","--error-format=json"],srcPath)
-    if out is None and err is None:
+    ok,out=runCommandOrFail(["vendor/bin/phpstan", "analyse", "--no-progress","--error-format=json"],srcPath,[0,1],output=True)
+    if not ok:
         return False
     
     try:
@@ -74,8 +87,8 @@ def run():
         return False
     
     print("[+] Running codebaseCheck. This may take a while...")
-    out,err=runCommand([sys.executable, "codebaseCheck.py", ".htaccess",".","--format=json"]+(["--direct-serving"] if directServing else []),srcPath)
-    if out is None and err is None:
+    ok,out=runCommandOrFail([sys.executable, "codebaseCheck.py", ".htaccess",".","--format=json"]+(["--direct-serving"] if directServing else []),srcPath,output=True)
+    if not ok:
         return False
     
     try:
@@ -97,8 +110,7 @@ def run():
         return False
         
     print("[+] Running report.py. This may take a while...")
-    out,err=runCommand([sys.executable, "report.py", srcDir,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODEBASECHECK_OUTPUT,"--output-json",outputJson,"--output-csv",outputCsv],outDir)
-    if out is None and err is None:
+    if not runCommandOrFail([sys.executable, "report.py", srcDir,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODEBASECHECK_OUTPUT,"--output-json",outputJson,"--output-csv",outputCsv],outDir):
         return False
     
     try:
@@ -114,6 +126,8 @@ def run():
     
 if __name__=="__main__":
     if run():
-        print(f"Analysis finished. Look at the output files !")
+        print(f"[+] Analysis finished. Look at the output files !")
+        sys.exit(0)
     else:
-        print("An error ocurred during Analysis.")
+        print("[!] An error ocurred during Analysis.")
+        sys.exit(1)

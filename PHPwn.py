@@ -18,26 +18,33 @@ def parseArgs():
     args= parser.parse_args()
     return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.input_patterns,args.output_json,args.output_csv,args.direct_serving
 
-def runCommand(command,wd):
+def runCommandOrFail(command,wd,allowCodes=[0]):
     try:
         result= subprocess.run(command,cwd=wd,capture_output=True,text=True)
+        if result.returncode not in allowCodes:
+            print(f"stdout: {result.stdout}")
+            print(f"stderr: {result.stderr}")
+            print(f"return code: {result.returncode}")
+            return False
+        return True
     except FileNotFoundError:
         print(f"[!] {command[0]} not found !")
-        return None,None
-    return "" if not result.stdout else result.stdout, "" if not result.stderr else result.stderr
+        return False
 
 def main():
     srcDir,outDir,excludes,safePatterns,inputPatterns,outputJson,outputCsv,directServing= parseArgs()
     print("[+] Setting up PHPwn...")
-    out,err=runCommand([sys.executable, "setup.py", srcDir,outDir,"--excludes",*excludes,"--safe-patterns",*safePatterns,"--input-patterns",*inputPatterns],os.getcwd())
-    if out is None and err is None:
+    if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir,"--excludes",*excludes,"--safe-patterns",*safePatterns,"--input-patterns",*inputPatterns],os.getcwd()):
+        print("An error ocurred during setup. Exiting...")
         return False
     print("[+] Starting analysis. This may take a while...")
-    out,err=runCommand([sys.executable, "run.py", srcDir,outDir,"--output-json",outputJson,"--output-csv",outputCsv]+(["--direct-serving"] if directServing else []),os.getcwd())
-    if out is None and err is None:
+    if not runCommandOrFail([sys.executable, "run.py", srcDir,outDir,"--output-json",outputJson,"--output-csv",outputCsv]+(["--direct-serving"] if directServing else []),os.getcwd()):
+        print("An error ocurred during analysis. Exiting...")
         return False
     print("[+] Analysis done !")
     return True
 
 if __name__=="__main__":
-    main()
+    if main():
+        sys.exit(0)
+    sys.exit(1)

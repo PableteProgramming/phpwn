@@ -112,14 +112,6 @@ class GlobalVarVisitor extends NodeVisitorAbstract{
                     $exprType= $this->typeMap[get_class($expr)] ?? "mixed";
                 }
                 $this->assignments[$var->name]=$exprType;
-
-
-                if(!isset($exprType)){
-                    // null => New_
-                    if($expr->class instanceof Name){
-                    }
-                }else{
-                }
             }
         }
     }
@@ -156,45 +148,55 @@ class PsalmXMLConfig{
         $this->filePath=$path;
     }
 
-    public function update(array $globalVars):void{
-        $xml= new DOMDocument("1.0");
-        $xml->preserveWhiteSpace =false;
-        $xml->formatOutput= true;
-        if($xml->load($this->filePath)){
-            $globalsTag= $xml->getElementsByTagName("globals")->item(0);
-            if($globalsTag===null){
-                // not there yet, we create it
-                $globalsTag= $xml->createElement("globals");
-                $xml->documentElement->appendChild($globalsTag);
-            }
-            else{
-                //already there, so we clean it
-                while($globalsTag->firstChild){
-                    $globalsTag->removeChild($globalsTag->firstChild);
+    public function update(array $globalVars):bool{
+        try{    
+            $xml= new DOMDocument("1.0");
+            $xml->preserveWhiteSpace =false;
+            $xml->formatOutput= true;
+            if($xml->load($this->filePath)){
+                $globalsTag= $xml->getElementsByTagName("globals")->item(0);
+                if($globalsTag===null){
+                    // not there yet, we create it
+                    $globalsTag= $xml->createElement("globals");
+                    $xml->documentElement->appendChild($globalsTag);
                 }
+                else{
+                    //already there, so we clean it
+                    while($globalsTag->firstChild){
+                        $globalsTag->removeChild($globalsTag->firstChild);
+                    }
+                }
+
+                foreach($globalVars as $var => $type){
+                    // we add the variable and it's type to teh psalm.xml
+                    $varNode= $xml->createElement("var");
+                    $varNode->setAttribute("name",$var);
+                    $varNode->setAttribute("type",$type);
+                    $globalsTag->appendChild($varNode);
+                }
+
+                if(!$xml->save($this->filePath)){
+                    echo "[!] Could not save ".$this->filePath."\n";
+                    return false;
+                };
+                return true;
+
+            }else{
+                echo "[!] Error loading xml file ".$this->filePath."\n";
+                return false;
             }
-
-            foreach($globalVars as $var => $type){
-                // we add the variable and it's type to teh psalm.xml
-                $varNode= $xml->createElement("var");
-                $varNode->setAttribute("name",$var);
-                $varNode->setAttribute("type",$type);
-                $globalsTag->appendChild($varNode);
-            }
-
-            $xml->save($this->filePath);
-
-        }else{
-            echo "[!] Error loading xml file ". $this->filePath. "\n";
         }
-
+        catch (Exception $e) {
+            echo "[!] XML error: ".$e->getMessage()."\n";
+            return false;
+        }
     }
 }
 
-function modifyPlugin(string $filename, array $taintedGlobals){
+function modifyPlugin(string $filename, array $taintedGlobals):bool{
     $taintedList= '"' . implode('", "',$taintedGlobals) . '"';
     $pluginCode=file_get_contents($filename);
-    if($pluginCode){
+    if($pluginCode!==false){
         $pluginCode = preg_replace(
             '/private static \$globalstoTaint=.*?;/s',
             'private static $globalstoTaint= [' . $taintedList . '];',
@@ -203,13 +205,19 @@ function modifyPlugin(string $filename, array $taintedGlobals){
 
         if($pluginCode===null){
             echo "[!] An error ocurred while trying to replace the file content\n";
+            return false;
         }
         else{
-            file_put_contents($filename,$pluginCode);
+            if(file_put_contents($filename,$pluginCode)===false){
+                echo "[!] Unable to write plugin file ". $filename . "\n";
+                return false;
+            }
         }
+        return true;
     }
     else{
         echo "[!] Unable to read plugin file ". $filename . "\n";
+        return false;
     }
 }
 
@@ -232,13 +240,19 @@ $files=getAllFiles(".",$skipDirs,"php");
 // we parse each file
 foreach($files as $file){
     $code= file_get_contents($file);
+    if($code===false){
+        echo "[!] An error ocurred while trying to read ".$file."\n";
+        // We skip the file, don't error
+        continue;
+    }
     try{
         $ast= $parser->parse($code);
         if($ast) {
             $traverser->traverse($ast);
-        }
+        } //otherwise, we skip the file
     }catch(Exception $e){
         echo "[!] Parse error in $file: " .  $e->getMessage(). "\n";
+        //we skip it, we don't error and break the whole execution !
     }
 }
 
@@ -251,7 +265,7 @@ if($listGlobs){
     foreach($globals as $var){
         echo $var."\n";
     }
-    exit;
+    exit(0);
 }
 
 $assignments= $visitor->assignments;
@@ -275,8 +289,15 @@ foreach($globalsTypes as $var => $type){
 }
 
 $psalmParser= new PsalmXMLConfig("psalm.xml");
-$psalmParser->update($safeGlobs);
+if($psalmParser->update($safeGlobs)===false){
+    echo "An error ocurred while trying to update psalm.xml\n";
+    exit(1);
+}
 
-modifyPlugin($psalmPluginsDir,$inputs);
+if(modifyPlugin($psalmPluginsDir,$inputs)===false){
+    echo "An error ocurred while trying to update the plugin code.\n";
+    exit(1);
+}
 
 echo "[+] Done";
+exit(0);

@@ -8,11 +8,11 @@ import argparse
 class Formatter:
     def format(self,f,l:list):
         if f=="json":
-            return json.dumps({"accessible_files":l},indent=2)
+            return True,json.dumps({"accessible_files":l},indent=2)
         elif f=="text":
-            return f"{l}"
+            return True,f"{l}"
         else:
-            return f"Output format {f} not supported !"
+            return False,f"Output format {f} not supported !"
 
 '''
 This class Parses the .htaccess files to build two arrays
@@ -115,6 +115,8 @@ class CodeBaseChecker:
         output=[]
         compiledPatterns=[re.compile(p) for p in blockedPaths]
         files= self.__private_getallFiles()
+        if files is None:
+            return None
         for file in files:
             file=file.strip()
             
@@ -172,12 +174,19 @@ args = argsParser.parse_args()
 
 parser= Parser(args.htaccess_path)
 if not parser.parse():
+    print(f"An error ocurred during parsing.")
     sys.exit(1)
     
 directserving= args.direct_serving
-        
 checker= CodeBaseChecker(args.src_dir,directserving)
 foundFiles= checker.check(parser.accessible,parser.blocked,parser.dirIndex)
+if foundFiles is None:
+    print(f"An error ocurred during codebase checking.")
+    sys.exit(1)
 
 formatter= Formatter()
-print(formatter.format(args.format,foundFiles))
+ok,output=formatter.format(args.format,foundFiles)
+if ok:
+    print(output)
+    sys.exit(0)
+sys.exit(1)

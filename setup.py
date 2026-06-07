@@ -27,6 +27,7 @@ import re
 import subprocess
 from pathlib import Path
 import json
+import sys
 
 TEMPLATE_DIR="Templates"
 PSALM_DIR="psalm"
@@ -84,13 +85,18 @@ def appendToPhpFile(filename,var,value):
         return False
     return True
         
-def runCommand(command,wd):
+def runCommandOrFail(command,wd,allowCodes=[0]):
     try:
         result= subprocess.run(command,cwd=wd,capture_output=True,text=True)
+        if result.returncode not in allowCodes:
+            print(f"stdout: {result.stdout}")
+            print(f"stderr: {result.stderr}")
+            print(f"return code: {result.returncode}")
+            return False
+        return True
     except FileNotFoundError:
         print(f"[!] {command[0]} not found !")
-        return None,None
-    return "" if not result.stdout else result.stdout, "" if not result.stderr else result.stderr
+        return False
 
 def replaceInFile(filename,pattern,replacement):
     try:
@@ -138,6 +144,7 @@ def setup():
         pass
     except Exception as e:
         print(f"An error occurred: {e}")
+        return False
     
     srcBaseName= os.path.basename(srcDir)
     srcPath= os.path.join(outDir,srcBaseName)
@@ -214,13 +221,11 @@ def setup():
         return False
     
     print("[+] Installing Psalm")
-    out,err=runCommand(["composer", "require", "--dev","vimeo/psalm"],srcPath)
-    if out is None and err is None:
+    if not runCommandOrFail(["composer", "require", "--dev","vimeo/psalm"],srcPath):
         return False
     
     print("[+] Running preprocess.php")
-    out,err=runCommand(["php", "preprocess.php"],srcPath)
-    if out is None and err is None:
+    if not runCommandOrFail(["php", "preprocess.php"],srcPath):
         return False
     
     # now copying all necessary PHPStan 
@@ -240,11 +245,13 @@ def setup():
         print("[+] excludes replaced successfully")
     else:
         print("An error ocurred while writing excludes to phpstan.neon")
+        return False
         
     if replaceInFile(os.path.join(srcPath,"phpstan.neon"),"# SCANDIR_PLACEHOLDER",f"        - {os.path.join(PHPSTAN_DIR,PHPSTAN_RULES_DIR)}"):
         print("[+] scanDir replaced successfully")
     else:
         print("An error ocurred while writing scanDir to phpstan.neon")
+        return False
         
     base= re.sub(r'[^a-zA-Z0-9]','',srcBaseName.rstrip("/\\"))
     namespace= (base[0].upper() + base[1:] if base else base) + "\\PHPStan\\"
@@ -253,15 +260,16 @@ def setup():
         print("[+] rules replaced successfully")
     else:
         print("An error append while writing rules to phpstan.neon")
+        return False
         
     if updateComposer(os.path.join(srcPath,"composer.json"),namespace,PHPSTAN_DIR+"/"):
         print("[+] composer.json got updated")
     else:
         print("An error ocurred while updating composer.json")
+        return False
         
     print("[+] Running dump-autoload")
-    out,err=runCommand(["composer", "dump-autoload"],srcPath)
-    if out is None and err is None:
+    if not runCommandOrFail(["composer", "dump-autoload"],srcPath):
         return False
     
     # Now, fixing the namespaces in the .php rules
@@ -274,8 +282,7 @@ def setup():
                 return False 
             
     print("[+] Installing PHPStan")
-    out,err=runCommand(["composer", "require", "--dev","phpstan/phpstan"],srcPath)
-    if out is None and err is None:
+    if not runCommandOrFail(["composer", "require", "--dev","phpstan/phpstan"],srcPath):
         return False
     
     shutil.copy(os.path.join(TEMPLATE_DIR,"CodebaseCheck","codebaseCheck.py"),os.path.join(srcPath,"codebaseCheck.py"))
@@ -285,5 +292,7 @@ def setup():
 if __name__=="__main__":
     if not setup():
         print(f"[!] An error ocurred during setup")
+        sys.exit(1)
     else:
         print("[+] Setup done !")
+        sys.exit(0)
