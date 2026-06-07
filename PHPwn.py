@@ -1,6 +1,7 @@
 import argparse
 import subprocess
 import os
+import sys
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="The PHPwn main script.")
@@ -27,17 +28,15 @@ def runCommand(command,wd):
 
 def main():
     srcDir,outDir,excludes,safePatterns,inputPatterns,outputJson,outputCsv,directServing= parseArgs()
-    print("[+] Running PHPwn. This may take a while...")
-    out,err=runCommand(["python3", "setup.py", srcDir,outDir,"--excludes",*excludes,"--safe-patterns",*safePatterns,"--input-patterns",*inputPatterns],os.getcwd())
-    print(out)
-    print(err)
+    print("[+] Setting up PHPwn...")
+    out,err=runCommand([sys.executable, "setup.py", srcDir,outDir,"--excludes",*excludes,"--safe-patterns",*safePatterns,"--input-patterns",*inputPatterns],os.getcwd())
     if out is None and err is None:
         return False
-    out,err=runCommand(["python3", "run.py", srcDir,outDir,"--output-json",outputJson,"--output-csv",outputCsv]+(["--direct-serving"] if directServing else []),os.getcwd())
-    print(out)
-    print(err)
+    print("[+] Starting analysis. This may take a while...")
+    out,err=runCommand([sys.executable, "run.py", srcDir,outDir,"--output-json",outputJson,"--output-csv",outputCsv]+(["--direct-serving"] if directServing else []),os.getcwd())
     if out is None and err is None:
         return False
+    print("[+] Analysis done !")
     return True
 
 if __name__=="__main__":

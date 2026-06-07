@@ -12,6 +12,7 @@ import subprocess
 import os
 import json
 import shutil
+import sys
 
 PSALM_OUTPUT="psalm-results.json"
 PHPSTAN_OUTPUT="phpstan-results.json"
@@ -73,7 +74,7 @@ def run():
         return False
     
     print("[+] Running codebaseCheck. This may take a while...")
-    out,err=runCommand(["python3", "codebaseCheck.py", ".htaccess",".","--format=json"]+(["--direct-serving"] if directServing else []),srcPath)
+    out,err=runCommand([sys.executable, "codebaseCheck.py", ".htaccess",".","--format=json"]+(["--direct-serving"] if directServing else []),srcPath)
     if out is None and err is None:
         return False
     
@@ -96,7 +97,7 @@ def run():
         return False
         
     print("[+] Running report.py. This may take a while...")
-    out,err=runCommand(["python3", "report.py", srcDir,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODEBASECHECK_OUTPUT,"--output-json",outputJson,"--output-csv",outputCsv],outDir)
+    out,err=runCommand([sys.executable, "report.py", srcDir,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODEBASECHECK_OUTPUT,"--output-json",outputJson,"--output-csv",outputCsv],outDir)
     if out is None and err is None:
         return False
     
