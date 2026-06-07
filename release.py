@@ -7,7 +7,7 @@ def createZip(name):
         f=zipfile.ZipFile(name,"w",zipfile.ZIP_DEFLATED)
         for file in ["PHPwn.py", "setup.py","run.py","requirements.txt"]:
             f.write(file)
-        for dirpath, dirs, files in os.walk("Templates"):
+        for dirpath, _, files in os.walk("Templates"):
             for file in files:
                 filepath= os.path.join(dirpath,file)
                 f.write(filepath)
