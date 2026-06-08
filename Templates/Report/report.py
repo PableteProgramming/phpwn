@@ -5,6 +5,7 @@ import io
 import argparse
 import os
 import sys
+from pathlib import Path
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="The PHPwn report script.")
@@ -27,10 +28,10 @@ class Report(ABC):
 
 # This class reports the file that are accessible and not guarded.
 class AccessibleFilesReport(Report):
-    def __init__(self,phpstanPath,codeCheckerPath,baseName):
+    def __init__(self,phpstanPath,codeCheckerPath,srcDir):
         self.phpstanPath=phpstanPath
         self.codeCheckerPath=codeCheckerPath
-        self.baseName=baseName
+        self.srcDir=srcDir
         
     def report(self):
         try:
@@ -53,19 +54,18 @@ class AccessibleFilesReport(Report):
         for filename, data in phpstanOutput["files"].items():
             for message in data["messages"]:
                 if(message["identifier"]=="security.missingGuard"):
-                    if self.baseName in filename:
-                        # we only want the relative path to be able to compare it to the other output
-                        missingguardFiles.append(filename.split(self.baseName)[1].strip())
-                    else:
-                        missingguardFiles.append(filename.strip())
+                    missingguardFiles.append(filename.strip())
         
         missingguardFiles= list(set(missingguardFiles))
+        missingguardFiles= [Path(f).resolve() for f in missingguardFiles]
         
         intersection=[]
         for file in codeCheckerOutput["accessible_files"]:
             file=file.strip()
-            if file in missingguardFiles:
+            if Path(file).resolve() in missingguardFiles:
                 intersection.append(file)
+        relDir= os.path.join(os.getcwd(),os.path.basename(self.srcDir))
+        intersection= [os.path.relpath(f, start=relDir) for f in intersection]
         output=[]
         for file in intersection:
             output.append({"type": "accessibleNotGuarded","file": file,"line": "","snippet": "","source": "","variable":"","trace": []})
@@ -144,14 +144,14 @@ class XSSReport(PsalmReport):
 # This class does a report of all errors: MissingGaurds, XSS and SQLI
 # We need this custom class so that the format, for example trace number match in case of formatting with csv
 class FullReport(Report):
-    def __init__(self,phpStanOutput,psalmOutput,codeCheckerOutput,baseName):
+    def __init__(self,srcDir,phpStanOutput,psalmOutput,codeCheckerOutput):
         self.phpStanOutput=phpStanOutput
         self.psalmOutput=psalmOutput
         self.codeCheckerOutput=codeCheckerOutput
-        self.baseName=baseName
+        self.srcDir=srcDir
         
     def report(self):
-        accessibleFiles=AccessibleFilesReport(self.phpStanOutput,self.codeCheckerOutput,self.baseName).report()
+        accessibleFiles=AccessibleFilesReport(self.phpStanOutput,self.codeCheckerOutput,self.srcDir).report()
         sqliOutput=SQLIReport(self.psalmOutput).report()
         xssOutput=XSSReport(self.psalmOutput).report()
         if accessibleFiles is None or sqliOutput is None or xssOutput is None:
@@ -211,8 +211,7 @@ class Formatter:
             return False,f"Format {self.type} not supported !"
             
 SRC_DIR,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODECHECKER_OUTPUT,OUTPUT_JSON,OUTPUT_CSV=parseArgs()
-BASENAME=os.path.basename(SRC_DIR)
-report= FullReport(PHPSTAN_OUTPUT,PSALM_OUTPUT,CODECHECKER_OUTPUT,BASENAME).report()
+report= FullReport(SRC_DIR,PHPSTAN_OUTPUT,PSALM_OUTPUT,CODECHECKER_OUTPUT).report()
 if report is None:
     print("An error ocurred while doing the full report.")
     sys.exit(1)

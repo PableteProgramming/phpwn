@@ -104,7 +104,7 @@ class CodeBaseChecker:
         if os.path.isdir(self.path):
             for subdir,_,files in os.walk(self.path, followlinks=False):
                 for file in files:
-                    filepath= "/"+os.path.relpath(os.path.join(subdir,file), start=self.path)
+                    filepath= os.path.relpath(os.path.join(subdir,file), start=self.path)
                     filenames.append(filepath)
             return filenames
         else:
@@ -158,6 +158,8 @@ class CodeBaseChecker:
                 if accessible:
                     for entry in toCheck:
                         output.append(entry)
+        cwd=os.getcwd()
+        output = [os.path.join(cwd, f) for f in output]
         return output
           
 
