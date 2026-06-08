@@ -224,7 +224,7 @@ function modifyPlugin(string $filename, array $taintedGlobals):bool{
 // Parsing command line args
 $listGlobs=false;
 if(count($argv)>1){
-    if($argv[1]==="--global"){
+    if($argv[1]==="--list"){
         $listGlobs=true;
     }
 }
@@ -261,10 +261,10 @@ $globals= array_keys($visitor->globalVars);
 
 // print them if user wants to
 if($listGlobs){
-    echo "[+] Global variables found:\n";
-    foreach($globals as $var){
-        echo $var."\n";
-    }
+    $output = array_map(function($var) {
+        return ["name" => $var, "type" => "unknown"];
+    }, $globals);
+    echo json_encode($output);
     exit(0);
 }
 

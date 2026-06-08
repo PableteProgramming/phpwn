@@ -1,23 +1,30 @@
 '''
 This script is the one that is going to configure everything before letting the analysis run.
 This are the steps done by this script:
-    - Parse command line args for variables
-    - Create necessary temporary dirs
-    - Copy the source code to analyze into it
-    - Copy all the Psalm stuff into the directory
-        - Replace important parts like ingoreFiles entries, and psalm stubs and plugin files
-        - Replace needed variables for preprocess.php (EXCLUDE_DIR,SAFE_PATTERNS,INPUT_PATTERS)
-        - Install psalm
-        - Run preprocess.php
-    - Copy all the PHPStan stuff into it
-        - Install PHPStan
-        - Copy all the necessary files
-        - Replace Exclude dirs to phpstan
-        - Add the custom rules to phpstan.neon
-        - Configure custom rules in composer.json
-        - Fix namespaces into the rules
-    - Copy codebaseChecker.py stuff
-    - Copy report.py
+    1) If --vars passed:
+        - Create necessary temporary dirs
+        - Copy the source code to analyze into it
+        - Copy preprocess.php into the directory
+        - Call preprocess.php --list to list all the detected global vars
+        - save it into phpwn.vars.json
+    2) Else
+        - Parse command line args for variables
+        - Create necessary temporary dirs
+        - Copy the source code to analyze into it
+        - Copy all the Psalm stuff into the directory
+            - Replace important parts like ingoreFiles entries, and psalm stubs and plugin files
+            - Replace needed variables for preprocess.php (EXCLUDE_DIR,SAFE_PATTERNS,INPUT_PATTERS)
+            - Install psalm
+            - Run preprocess.php
+        - Copy all the PHPStan stuff into it
+            - Install PHPStan
+            - Copy all the necessary files
+            - Replace Exclude dirs to phpstan
+            - Add the custom rules to phpstan.neon
+            - Configure custom rules in composer.json
+            - Fix namespaces into the rules
+        - Copy codebaseChecker.py stuff
+        - Copy report.py
 '''
 import argparse
 import shutil
@@ -29,6 +36,7 @@ from pathlib import Path
 import json
 import sys
 
+VARS_FILE= "phpwn.vars.json"
 TEMPLATE_DIR="Templates"
 PSALM_DIR="psalm"
 PSALM_STUB_DIR="stubs"
@@ -65,8 +73,9 @@ def parseArgs():
     parser.add_argument("--excludes", "-e", nargs="+", default=[], help="Directories to skip.")
     parser.add_argument("--safe-patterns", "-s", nargs="+", default=[], help="Patterns for safe variables.")
     parser.add_argument("--input-patterns", "-i", nargs="+", default=[], help="Patterns for input variables.")
+    parser.add_argument("--vars","-v",action="store_true",help="Pass this variable to get a list of global variables.")
     args= parser.parse_args()
-    return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.input_patterns
+    return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.input_patterns,args.vars
 
 def buildPhpArray(elements):
     return ", ".join(f"'{elem}'" for elem in elements)
@@ -85,18 +94,27 @@ def appendToPhpFile(filename,var,value):
         return False
     return True
         
-def runCommandOrFail(command,wd,allowCodes=[0]):
+def runCommandOrFail(command,wd,allowCodes=[0],output=False):
     try:
         result= subprocess.run(command,cwd=wd,capture_output=True,text=True)
         if result.returncode not in allowCodes:
             print(f"stdout: {result.stdout}")
             print(f"stderr: {result.stderr}")
             print(f"return code: {result.returncode}")
-            return False
-        return True
+            if output:
+                return False,""
+            else:
+                return False
+        if output:
+            return True,result.stdout
+        else:
+            return True
     except FileNotFoundError:
         print(f"[!] {command[0]} not found !")
-        return False
+        if output:
+            return False,""
+        else:
+            return False
 
 def replaceInFile(filename,pattern,replacement):
     try:
@@ -132,7 +150,7 @@ def updateComposer(filename,namespace,dir):
         return False
         
 def setup():
-    srcDir, outDir, excludes, safePatterns, inputPatterns = parseArgs()
+    srcDir, outDir, excludes, safePatterns, inputPatterns,vars = parseArgs()
     
     excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR])
     
@@ -150,16 +168,43 @@ def setup():
     srcPath= os.path.join(outDir,srcBaseName)
     shutil.copytree(srcDir,srcPath)
     
-    print(f"[+] Copying all Psalm important setup files")
-    # Copy Psalm stuff now
-    psalmTemplatesDir= os.path.join(TEMPLATE_DIR,"Psalm")
-    shutil.copy(os.path.join(psalmTemplatesDir,"psalm.xml"),os.path.join(srcPath,"psalm.xml"))
     psalmDir= os.path.join(srcPath,PSALM_DIR)
     psalmStubsDir=os.path.join(psalmDir,PSALM_STUB_DIR)
     psalmPluginsDir=os.path.join(psalmDir,PSALM_PLUGIN_DIR)
+    psalmTemplatesDir= os.path.join(TEMPLATE_DIR,"Psalm")
     os.mkdir(psalmDir)
     os.mkdir(psalmStubsDir)
     os.mkdir(psalmPluginsDir)
+    
+    if(vars):
+        # we are in the first step, we just want to list the variables.
+        # We copy preprocess.php
+        shutil.copy(os.path.join(psalmTemplatesDir,"preprocess.php"),srcPath)
+        if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"skipDirs",f"[{buildPhpArray(excludes)}];"):
+            print(f"[+] Excludes where appended to preprocess.php")
+        else:
+            print(f"An error occurred while trying to append excludes to preprocess.php")
+            return False
+        print("[+] Installing Psalm")
+        if not runCommandOrFail(["composer", "require", "--dev","vimeo/psalm"],srcPath):
+            return False
+        print("[+] Running preprocess.php --list")
+        ok,output=runCommandOrFail(["php", "preprocess.php", "--list"],srcPath,output=True)
+        if not ok:
+            return False
+        try:
+            f= open(os.path.join(srcDir,VARS_FILE),"w")
+            json.dump(json.loads(output),f)
+            f.close()
+        except Exception as e:
+            print(f"An error ocurred while writing output of preprocess.php to {VARS_FILE}")
+            return False
+        shutil.rmtree(outDir)
+        return True
+    
+    print(f"[+] Copying all Psalm important setup files")
+    # Copy Psalm stuff now
+    shutil.copy(os.path.join(psalmTemplatesDir,"psalm.xml"),os.path.join(srcPath,"psalm.xml"))
     shutil.copy(os.path.join(psalmTemplatesDir,"defs.php"),psalmStubsDir)
     shutil.copy(os.path.join(psalmTemplatesDir,"globalVarTainter.php"),psalmPluginsDir)
     shutil.copy(os.path.join(psalmTemplatesDir,"preprocess.php"),srcPath)
@@ -199,7 +244,7 @@ def setup():
     if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"skipDirs",f"[{buildPhpArray(excludes)}];"):
         print(f"[+] Excludes where appended to preprocess.php")
     else:
-        print(f"An error occurred while trying to append safe patterns to preprocess.php")
+        print(f"An error occurred while trying to append excludes to preprocess.php")
         return False
     
     if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"safePatterns",f"[{buildPhpArray(safePatterns)}];"):
