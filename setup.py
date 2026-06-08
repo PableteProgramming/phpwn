@@ -36,7 +36,6 @@ from pathlib import Path
 import json
 import sys
 
-VARS_FILE= "phpwn.vars.json"
 TEMPLATE_DIR="Templates"
 PSALM_DIR="psalm"
 PSALM_STUB_DIR="stubs"
@@ -74,8 +73,9 @@ def parseArgs():
     parser.add_argument("--safe-patterns", "-s", nargs="+", default=[], help="Patterns for safe variables.")
     parser.add_argument("--input-patterns", "-i", nargs="+", default=[], help="Patterns for input variables.")
     parser.add_argument("--vars","-v",action="store_true",help="Pass this variable to get a list of global variables.")
+    parser.add_argument("--vars-file","-f",type=str,default="phpwn.vars.json", help="The path of the file with the variables.")
     args= parser.parse_args()
-    return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.input_patterns,args.vars
+    return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.input_patterns,args.vars,args.vars_file
 
 def buildPhpArray(elements):
     return ", ".join(f"'{elem}'" for elem in elements)
@@ -150,7 +150,7 @@ def updateComposer(filename,namespace,dir):
         return False
         
 def setup():
-    srcDir, outDir, excludes, safePatterns, inputPatterns,vars = parseArgs()
+    srcDir, outDir, excludes, safePatterns, inputPatterns,vars,varsFile = parseArgs()
     
     excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR])
     
@@ -193,13 +193,13 @@ def setup():
         if not ok:
             return False
         try:
-            f= open(os.path.join(srcDir,VARS_FILE),"w")
+            f= open(varsFile,"w")
             json.dump(json.loads(output),f)
             f.close()
         except Exception as e:
-            print(f"An error ocurred while writing output of preprocess.php to {VARS_FILE}")
+            print(f"An error ocurred while writing output of preprocess.php to {varsFile}: {e}")
             return False
-        shutil.rmtree(outDir)
+        #shutil.rmtree(outDir)
         return True
     
     print(f"[+] Copying all Psalm important setup files")
