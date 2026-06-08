@@ -35,7 +35,7 @@ function runCommand(cmd: string, cwd: string): Promise<void> {
 
 async function extractPHPwn(context: vscode.ExtensionContext, workspaceRoot: string): Promise<void> {
     const extractDir = getExtractDir(workspaceRoot);
-    const zipPath = path.join(context.extensionPath, 'resources', 'phpwn.zip');
+    const zipPath = path.join(context.extensionPath, 'resources', 'PHPwn.zip');
 
     if (!fs.existsSync(zipPath)) {
         throw new Error('PHPwn bundle not found in extension resources.');
