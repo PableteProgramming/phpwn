@@ -4,7 +4,6 @@
   "outputJson": "report.json",
   "outputCsv": "report.csv",
   "excludes": ["vendor"],
-  "safePatterns": ["date", "time", "url", "ip", "lang", "config", "db", "conn", "pdo", "logger", "purifier"],
-  "inputPatterns": ["request", "input", "post", "get", "param", "query", "form", "data", "cookie", "session"],
+  "variablesFile": "phpwn.vars.json",
   "directServing": true
 }

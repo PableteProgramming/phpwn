@@ -23,13 +23,11 @@ function runCommand(cmd: string, cwd: string): Promise<void> {
     return new Promise((resolve, reject) => {
         const proc = cp.exec(cmd, { cwd }, (error, stdout, stderr) => {
             if (error) {
-                reject(new Error(stderr || error.message));
+                reject(new Error(`${stderr}\n${stdout}`));
             } else {
                 resolve();
             }
         });
-        proc.stdout?.pipe(process.stdout);
-        proc.stderr?.pipe(process.stderr);
     });
 }
 
@@ -71,22 +69,18 @@ async function setupVenv(workspaceRoot: string): Promise<void> {
 function buildArgs(config: any, workspaceRoot: string): string {
     const target = path.resolve(workspaceRoot, config.target);
     const outputDir = path.resolve(workspaceRoot, config.outputDir);
+    const varsFile = path.resolve(workspaceRoot, config.variablesFile);
 
     const args: string[] = [
         `"${target}"`,
         `"${outputDir}"`,
         `--output-json ${config.outputJson}`,
         `--output-csv ${config.outputCsv}`,
+        `--vars-file "${varsFile}"`,
     ];
 
     if (config.excludes?.length) {
         args.push(`--excludes ${config.excludes.join(' ')}`);
-    }
-    if (config.safePatterns?.length) {
-        args.push(`--safe-patterns ${config.safePatterns.join(' ')}`);
-    }
-    if (config.inputPatterns?.length) {
-        args.push(`--input-patterns ${config.inputPatterns.join(' ')}`);
     }
     if (config.directServing) {
         args.push('--direct-serving');
@@ -95,7 +89,7 @@ function buildArgs(config: any, workspaceRoot: string): string {
     return args.join(' ');
 }
 
-export async function runPHPwn(context: vscode.ExtensionContext, workspaceRoot: string): Promise<void> {
+export async function runPHPwn(context: vscode.ExtensionContext, workspaceRoot: string): Promise<'vars' | 'done'> {
     const configPath = path.join(workspaceRoot, 'phpwn.config.json');
     if (!fs.existsSync(configPath)) {
         throw new Error('phpwn.config.json not found in workspace root.');
@@ -107,7 +101,6 @@ export async function runPHPwn(context: vscode.ExtensionContext, workspaceRoot: 
         title: 'PHPwn',
         cancellable: false
     }, async (progress) => {
-
         progress.report({ message: 'Extracting PHPwn...' });
         await extractPHPwn(context, workspaceRoot);
 
@@ -119,12 +112,16 @@ export async function runPHPwn(context: vscode.ExtensionContext, workspaceRoot: 
         const python = getVenvPython(workspaceRoot);
         const args = buildArgs(config, workspaceRoot);
 
-        // Make sure output dir exists
         const outputDir = path.resolve(workspaceRoot, config.outputDir);
         fs.mkdirSync(outputDir, { recursive: true });
 
         await runCommand(`"${python}" PHPwn.py ${args}`, extractDir);
-
-        vscode.window.showInformationMessage('PHPwn: Analysis complete!');
     });
+
+    const reportFile = path.resolve(workspaceRoot, config.outputDir, config.outputJson);
+    if (fs.existsSync(reportFile)) {
+        vscode.window.showInformationMessage('PHPwn: Analysis complete!');
+        return 'done';
+    }
+    return 'vars';
 }

@@ -15,22 +15,61 @@
     "commands": [
       {
         "command": "phpwn.run",
-        "title": "Run PHPwn"
+        "title": "PHPwn: Run Analysis"
       },
       {
         "command": "phpwn.showReport",
-        "title": "Show PHPwn Report"
+        "title": "PHPwn: Load Report"
+      },
+      {
+        "command": "phpwn.markSafe",
+        "title": "Safe",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "phpwn.markInput",
+        "title": "Input",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "phpwn.markUnknown",
+        "title": "Unknown",
+        "icon": "$(question)"
       }
     ],
     "views": {
-    "explorer": [
-      {
-        "id": "phpwnResults",
-        "name": "PHPwn Results",
-        "icon": "resources/phpwn.svg"
-      }
-    ]
-  }
+      "explorer": [
+        {
+          "id": "phpwnResults",
+          "name": "PHPwn Results",
+          "icon": "resources/phpwn.svg"
+        },
+        {
+          "id": "phpwnVariables",
+          "name": "PHPwn Variables",
+          "icon": "resources/phpwn.svg"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "phpwn.markSafe",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@1"
+        },
+        {
+          "command": "phpwn.markInput",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@2"
+        },
+        {
+          "command": "phpwn.markUnknown",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@3"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
