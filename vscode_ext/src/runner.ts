@@ -80,7 +80,7 @@ function buildArgs(config: any, workspaceRoot: string): string {
     ];
 
     if (config.excludes?.length) {
-        args.push(`--excludes ${config.excludes.join(' ')}`);
+        args.push(`--excludes ${config.excludes.join(' ')} ${PHPWN_DIR}`);
     }
     if (config.directServing) {
         args.push('--direct-serving');
