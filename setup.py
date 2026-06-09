@@ -152,7 +152,7 @@ def updateComposer(filename,namespace,dir):
 def setup():
     srcDir, outDir, excludes, safePatterns, inputPatterns,vars,varsFile = parseArgs()
     
-    excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR,".phpwn"])
+    excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR])
     
     # we first copy the source dir into the temp dir
     print(f"[+] Creating {outDir} and copying source code")
@@ -175,9 +175,6 @@ def setup():
     os.mkdir(psalmDir)
     os.mkdir(psalmStubsDir)
     os.mkdir(psalmPluginsDir)
-    
-    # To avoid phpstan throwing errors !
-    excludes=[e for e in excludes if os.path.exists(os.path.join(srcPath, e))]
     
     if(vars):
         # we are in the first step, we just want to list the variables.
