@@ -152,7 +152,7 @@ def updateComposer(filename,namespace,dir):
 def setup():
     srcDir, outDir, excludes, safePatterns, inputPatterns,vars,varsFile = parseArgs()
     
-    excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR])
+    excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR,".phpwn"])
     
     # we first copy the source dir into the temp dir
     print(f"[+] Creating {outDir} and copying source code")
@@ -194,6 +194,7 @@ def setup():
             return False
         try:
             f= open(varsFile,"w")
+            output = output[output.find('['):] # in case some error get's printed but the json still there
             json.dump(json.loads(output),f,indent=2)
             f.close()
         except Exception as e:
