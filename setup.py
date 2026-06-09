@@ -164,7 +164,7 @@ def setup():
         print(f"An error occurred: {e}")
         return False
     
-    srcBaseName= os.path.basename(srcDir)
+    srcBaseName= os.path.basename(os.path.normpath(srcDir))
     srcPath= os.path.join(outDir,srcBaseName)
     shutil.copytree(srcDir,srcPath)
     
@@ -194,7 +194,7 @@ def setup():
             return False
         try:
             f= open(varsFile,"w")
-            json.dump(json.loads(output),f)
+            json.dump(json.loads(output),f,indent=2)
             f.close()
         except Exception as e:
             print(f"An error ocurred while writing output of preprocess.php to {varsFile}: {e}")
@@ -320,7 +320,7 @@ def setup():
     # Now, fixing the namespaces in the .php rules
     for f in Path(phpstanRulesDir).iterdir():
         if f.is_file():
-            if replaceInFile(os.path.join(phpstanRulesDir,os.path.basename(f)),"namespace $NAMESPACE;",f"namespace {namespace}{PHPSTAN_RULES_DIR};"):
+            if replaceInFile(os.path.join(phpstanRulesDir,os.path.basename(os.path.normpath(f))),"namespace $NAMESPACE;",f"namespace {namespace}{PHPSTAN_RULES_DIR};"):
                 print(f"[+] namespace replaced successfully in {f}")
             else:
                 print("An error append while replacing namespaces in the rules")

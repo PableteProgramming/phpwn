@@ -121,20 +121,13 @@ class GlobalVarVisitor extends NodeVisitorAbstract{
  * This function checks if the variable looks like a user input depending on the lists above
  */
 function isInput(string $name, array $inputs, array $safe): bool{
-    $name= strtolower($name);
-    foreach($inputs as $pattern){
-        if(preg_match("/".$pattern."/",$name)){
-            return true;
-        }
+    // we don't do regex anymore because we pass the exact variable names !
+    if(in_array($name, $safe)){
+        return false;
     }
-
-    foreach($safe as $pattern){
-        if(preg_match("/".$pattern."/",$name)){
-            return false;
-        }
+    if(in_array($name, $inputs)){
+        return true;
     }
-
-    //if not found, we keep it as input
     return true;
 }
 

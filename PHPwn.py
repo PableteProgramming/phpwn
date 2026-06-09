@@ -61,7 +61,6 @@ def main():
             return False
         return True
 
-
     ok,safePatterns,inputPatterns= buildPatternsList(varsFile)
     if not ok:
         return False

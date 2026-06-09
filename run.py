@@ -54,7 +54,7 @@ def runCommandOrFail(command,wd,allowCodes=[0],output=False):
 
 def run():
     srcDir,outDir,outputJson,outputCsv,directServing= parseArgs()
-    srcPath= os.path.join(outDir,os.path.basename(srcDir))
+    srcPath= os.path.join(outDir,os.path.basename(os.path.normpath(srcDir)))
     
     print("[+] Running Psalm. This may take a while...")
     ok,out=runCommandOrFail(["vendor/bin/psalm", "--taint-analysis", "--no-cache","--output-format=json"],srcPath,[0,2],output=True)

@@ -64,7 +64,7 @@ class AccessibleFilesReport(Report):
             file=file.strip()
             if Path(file).resolve() in missingguardFiles:
                 intersection.append(file)
-        relDir= os.path.join(os.getcwd(),os.path.basename(self.srcDir))
+        relDir= os.path.join(os.getcwd(),os.path.basename(os.path.normpath(self.srcDir)))
         intersection= [os.path.relpath(f, start=relDir) for f in intersection]
         output=[]
         for file in intersection:
