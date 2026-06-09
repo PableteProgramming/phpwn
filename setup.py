@@ -176,6 +176,9 @@ def setup():
     os.mkdir(psalmStubsDir)
     os.mkdir(psalmPluginsDir)
     
+    # To avoid phpstan throwing errors !
+    excludes=[e for e in excludes if os.path.exists(os.path.join(srcPath, e))]
+    
     if(vars):
         # we are in the first step, we just want to list the variables.
         # We copy preprocess.php
