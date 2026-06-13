@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Shape of a single finding in report.json
 interface Finding {
     type: string;
     file: string;
@@ -13,11 +12,7 @@ interface Finding {
     trace: { label: string; file: string; line: number }[];
 }
 
-// A node in the TreeView can be one of three things:
-// - a group (e.g. "TaintedSql (12)")
-// - a finding (e.g. "src/controllers/User.php:45")
-// - a trace step (e.g. "$request → src/controllers/User.php:45")
-type NodeKind = 'group' | 'finding' | 'trace';
+type NodeKind = 'type' | 'source' | 'file' | 'line' | 'trace' | 'placeholder';
 
 export class ReportNode extends vscode.TreeItem {
     constructor(
@@ -25,17 +20,38 @@ export class ReportNode extends vscode.TreeItem {
         public readonly kind: NodeKind,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
         public readonly children: ReportNode[] = [],
-        public readonly finding?: Finding
+        public readonly command?: vscode.Command
     ) {
         super(label, collapsibleState);
+        this.command = command;
 
-        if (kind === 'group') {
-            this.iconPath = new vscode.ThemeIcon('warning');
-        } else if (kind === 'finding') {
-            this.iconPath = new vscode.ThemeIcon('bug');
-            this.description = finding?.source ? `source: ${finding.source}` : '';
-        } else if (kind === 'trace') {
-            this.iconPath = new vscode.ThemeIcon('arrow-right');
+        switch (kind) {
+            case 'type':
+                if (label.toLowerCase().includes('sql')) {
+                    this.iconPath = new vscode.ThemeIcon('database', new vscode.ThemeColor('testing.iconFailed'));
+                }
+                else if (label.toLowerCase().includes('access')) {
+                    this.iconPath = new vscode.ThemeIcon('file-code', new vscode.ThemeColor('testing.iconFailed'));
+                }
+                else {
+                    this.iconPath = new vscode.ThemeIcon('code', new vscode.ThemeColor('testing.iconFailed'));
+                }
+                break;
+            case 'source':
+                this.iconPath = new vscode.ThemeIcon('variable',new vscode.ThemeColor('testing.iconPassed'));
+                break;
+            case 'file':
+                this.iconPath = new vscode.ThemeIcon('file-text',new vscode.ThemeColor('notificationsInfoIcon.foreground'));
+                break;
+            case 'line':
+                this.iconPath = new vscode.ThemeIcon('debug-breakpoint-log',new vscode.ThemeColor('list.warningForeground'));
+                break;
+            case 'trace':
+                this.iconPath = new vscode.ThemeIcon('git-commit');
+                break;
+            case 'placeholder':
+                this.iconPath = new vscode.ThemeIcon('info');
+                break;
         }
     }
 }
@@ -63,110 +79,150 @@ export class ReportProvider implements vscode.TreeDataProvider<ReportNode> {
         return element.children;
     }
 
+    private makeOpenCommand(filePath: string, line?: number): vscode.Command {
+        if (line) {
+            return {
+                command: 'vscode.open',
+                title: 'Open File',
+                arguments: [
+                    vscode.Uri.file(filePath),
+                    {
+                        selection: new vscode.Range(
+                            new vscode.Position(Number(line) - 1, 0),
+                            new vscode.Position(Number(line) - 1, 0)
+                        )
+                    }
+                ]
+            };
+        }
+        return {
+            command: 'vscode.open',
+            title: 'Open File',
+            arguments: [vscode.Uri.file(filePath)]
+        };
+    }
+
     private loadReport(workspaceRoot: string): ReportNode[] {
-        // Find report.json path from config
         const configPath = path.join(workspaceRoot, 'phpwn.config.json');
         if (!fs.existsSync(configPath)) {
-            return [new ReportNode('No phpwn.config.json found', 'group', vscode.TreeItemCollapsibleState.None)];
+            return [new ReportNode('No phpwn.config.json found', 'placeholder', vscode.TreeItemCollapsibleState.None)];
         }
 
         const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         const reportPath = path.join(workspaceRoot, config.outputDir, config.outputJson);
 
         if (!fs.existsSync(reportPath)) {
-            return [new ReportNode('Please run PHPwn first', 'group', vscode.TreeItemCollapsibleState.None)];
+            return [new ReportNode('Please run PHPwn first', 'placeholder', vscode.TreeItemCollapsibleState.None)];
         }
 
         const findings: Finding[] = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
-
-        // Group findings by type
-        const grouped = new Map<string, Finding[]>();
-        for (const f of findings) {
-            if (!grouped.has(f.type)) {
-                grouped.set(f.type, []);
-            }
-            grouped.get(f.type)!.push(f);
-        }
-
-        // We need the srcDir to make file paths in the report clickable and open the correct file in VSCode
         const srcDir = path.resolve(workspaceRoot, config.target);
 
-        // Build tree nodes
-        const groupNodes: ReportNode[] = [];
-        for (const [type, items] of grouped) {
-            const findingNodes = items.map(f => {
-                const label = f.line ? `${f.file}:${f.line}` : f.file;
+        // Group by type
+        const byType = new Map<string, Finding[]>();
+        for (const f of findings) {
+            if (!byType.has(f.type)) { byType.set(f.type, []); }
+            byType.get(f.type)!.push(f);
+        }
 
-                // Trace children
-                const traceNodes = f.trace.map(t => {
-                    const node = new ReportNode(
-                        `${t.label} — ${t.file}:${t.line}`,
-                        'trace',
-                        vscode.TreeItemCollapsibleState.None
+        const typeNodes: ReportNode[] = [];
+
+        for (const [type, items] of byType) {
+
+            // missingAccessControl — special case: type → file only
+            if (type === 'missingAccessControl') {
+                const fileNodes = items.map(f => {
+                    const absPath = path.resolve(srcDir, f.file);
+                    return new ReportNode(
+                        f.file,
+                        'file',
+                        vscode.TreeItemCollapsibleState.None,
+                        [],
+                        this.makeOpenCommand(absPath)
                     );
-                    node.command = {
-                        command: 'vscode.open',
-                        title: 'Open File',
-                        arguments: [
-                            vscode.Uri.file(path.resolve(srcDir, t.file)),
-                            {
-                                selection: new vscode.Range(
-                                    new vscode.Position(Number(t.line) - 1, 0),
-                                    new vscode.Position(Number(t.line) - 1, 0)
-                                )
-                            }
-                        ]
-                    };
-                    return node;
                 });
+                typeNodes.push(new ReportNode(
+                    `${type} (${items.length})`,
+                    'type',
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                    fileNodes
+                ));
+                continue;
+            }
 
-                const finding = new ReportNode(
-                    label,
-                    'finding',
-                    traceNodes.length > 0
-                        ? vscode.TreeItemCollapsibleState.Collapsed
-                        : vscode.TreeItemCollapsibleState.None,
-                    traceNodes,
-                    f
-                );
+            // SQLI and XSS — type → source → file → line
+            const bySource = new Map<string, Finding[]>();
+            for (const f of items) {
+                const src = f.source || 'unknown';
+                if (!bySource.has(src)) { bySource.set(src, []); }
+                bySource.get(src)!.push(f);
+            }
 
-                // Make it clickable
-                if (f.file && f.line) {
-                    finding.command = {
-                        command: 'vscode.open',
-                        title: 'Open File',
-                        arguments: [
-                            vscode.Uri.file(path.resolve(srcDir, f.file)),
-                            {
-                                selection: new vscode.Range(
-                                    new vscode.Position(Number(f.line) - 1, 0),
-                                    new vscode.Position(Number(f.line) - 1, 0)
-                                )
-                            }
-                        ]
-                    };
-                }
-                else if (f.file) {
-                    finding.command = {
-                        command: 'vscode.open',
-                        title: 'Open File',
-                        arguments: [
-                            vscode.Uri.file(path.resolve(srcDir, f.file))
-                        ]
-                    };
+            const sourceNodes: ReportNode[] = [];
+
+            for (const [source, sourceItems] of bySource) {
+
+                // Group by file
+                const byFile = new Map<string, Finding[]>();
+                for (const f of sourceItems) {
+                    if (!byFile.has(f.file)) { byFile.set(f.file, []); }
+                    byFile.get(f.file)!.push(f);
                 }
 
-                return finding;
-            });
+                const fileNodes: ReportNode[] = [];
 
-            groupNodes.push(new ReportNode(
+                for (const [file, fileItems] of byFile) {
+                    const absFile = path.resolve(srcDir, file);
+
+                    const lineNodes: ReportNode[] = fileItems.map(f => {
+                        // Trace children
+                        const traceNodes = f.trace.map(t => {
+                            const absTrace = path.resolve(srcDir, t.file);
+                            return new ReportNode(
+                                `${t.label} — ${t.file}:${t.line}`,
+                                'trace',
+                                vscode.TreeItemCollapsibleState.None,
+                                [],
+                                this.makeOpenCommand(absTrace, t.line)
+                            );
+                        });
+
+                        return new ReportNode(
+                            `line ${f.line}${f.snippet ? ' — ' + f.snippet.slice(0, 60) + '...' : ''}`,
+                            'line',
+                            traceNodes.length > 0
+                                ? vscode.TreeItemCollapsibleState.Collapsed
+                                : vscode.TreeItemCollapsibleState.None,
+                            traceNodes,
+                            this.makeOpenCommand(absFile, Number(f.line))
+                        );
+                    });
+
+                    fileNodes.push(new ReportNode(
+                        `${file} (${fileItems.length})`,
+                        'file',
+                        vscode.TreeItemCollapsibleState.Collapsed,
+                        lineNodes,
+                        this.makeOpenCommand(absFile)
+                    ));
+                }
+
+                sourceNodes.push(new ReportNode(
+                    `${source} (${sourceItems.length})`,
+                    'source',
+                    vscode.TreeItemCollapsibleState.Collapsed,
+                    fileNodes
+                ));
+            }
+
+            typeNodes.push(new ReportNode(
                 `${type} (${items.length})`,
-                'group',
+                'type',
                 vscode.TreeItemCollapsibleState.Collapsed,
-                findingNodes
+                sourceNodes
             ));
         }
 
-        return groupNodes;
+        return typeNodes;
     }
 }
