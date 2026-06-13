@@ -91,6 +91,13 @@ export function activate(context: vscode.ExtensionContext) {
             variablesProvider.setVariableType(node, 'unknown');
         })
     );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('phpwn.refreshReport', () => {
+            if (!workspaceRoot) { return; }
+            reportProvider.refresh(workspaceRoot);
+        })
+    );
 }
 
 export function deactivate() {}

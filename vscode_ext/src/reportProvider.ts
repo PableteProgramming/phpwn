@@ -74,7 +74,7 @@ export class ReportProvider implements vscode.TreeDataProvider<ReportNode> {
         const reportPath = path.join(workspaceRoot, config.outputDir, config.outputJson);
 
         if (!fs.existsSync(reportPath)) {
-            return [new ReportNode('No report.json found — run PHPwn first', 'group', vscode.TreeItemCollapsibleState.None)];
+            return [new ReportNode('Please run PHPwn first', 'group', vscode.TreeItemCollapsibleState.None)];
         }
 
         const findings: Finding[] = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));

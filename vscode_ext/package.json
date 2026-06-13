@@ -35,6 +35,11 @@
         "command": "phpwn.markUnknown",
         "title": "Unknown",
         "icon": "$(question)"
+      },
+      {
+        "command": "phpwn.refreshReport",
+        "title": "Refresh",
+        "icon": "$(refresh)"
       }
     ],
     "views": {
@@ -67,6 +72,13 @@
           "command": "phpwn.markUnknown",
           "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
           "group": "inline@3"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "phpwn.refreshReport",
+          "when": "view == phpwnResults",
+          "group": "navigation"
         }
       ]
     }
