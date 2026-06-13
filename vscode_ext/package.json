@@ -40,6 +40,11 @@
         "command": "phpwn.refreshReport",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "phpwn.refreshVariables",
+        "title": "Refresh",
+        "icon": "$(refresh)"
       }
     ],
     "views": {
@@ -78,6 +83,11 @@
         {
           "command": "phpwn.refreshReport",
           "when": "view == phpwnResults",
+          "group": "navigation"
+        },
+        {
+          "command": "phpwn.refreshVariables",
+          "when": "view == phpwnVariables",
           "group": "navigation"
         }
       ]

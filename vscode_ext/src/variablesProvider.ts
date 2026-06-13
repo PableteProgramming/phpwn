@@ -49,9 +49,8 @@ export class VariablesProvider implements vscode.TreeDataProvider<VariableNode> 
 
     getChildren(): VariableNode[] {
         if (!this.varsFilePath || !fs.existsSync(this.varsFilePath)) {
-            return [];
+            return [new VariableNode({ name: 'Please run PHPwn first', type: 'unknown' }, '')];
         }
-
         try {
             const content: PhpwnVariable[] = JSON.parse(fs.readFileSync(this.varsFilePath, 'utf-8'));
             return content.map(v => new VariableNode(v, this.varsFilePath!));

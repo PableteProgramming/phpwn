@@ -98,6 +98,14 @@ export function activate(context: vscode.ExtensionContext) {
             reportProvider.refresh(workspaceRoot);
         })
     );
+    
+    context.subscriptions.push(
+        vscode.commands.registerCommand('phpwn.refreshVariables', () => {
+            const varsFile = getVarsFilePath();
+            if (!varsFile) { return; }
+            variablesProvider.refresh(varsFile);
+        })
+    );
 }
 
-export function deactivate() {}
+export function deactivate() { }
