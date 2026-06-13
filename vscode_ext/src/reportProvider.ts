@@ -88,6 +88,9 @@ export class ReportProvider implements vscode.TreeDataProvider<ReportNode> {
             grouped.get(f.type)!.push(f);
         }
 
+        // We need the srcDir to make file paths in the report clickable and open the correct file in VSCode
+        const srcDir = path.resolve(workspaceRoot, config.target);
+
         // Build tree nodes
         const groupNodes: ReportNode[] = [];
         for (const [type, items] of grouped) {
@@ -95,15 +98,29 @@ export class ReportProvider implements vscode.TreeDataProvider<ReportNode> {
                 const label = f.line ? `${f.file}:${f.line}` : f.file;
 
                 // Trace children
-                const traceNodes = f.trace.map(t =>
-                    new ReportNode(
+                const traceNodes = f.trace.map(t => {
+                    const node = new ReportNode(
                         `${t.label} — ${t.file}:${t.line}`,
                         'trace',
                         vscode.TreeItemCollapsibleState.None
-                    )
-                );
+                    );
+                    node.command = {
+                        command: 'vscode.open',
+                        title: 'Open File',
+                        arguments: [
+                            vscode.Uri.file(path.resolve(srcDir, t.file)),
+                            {
+                                selection: new vscode.Range(
+                                    new vscode.Position(Number(t.line) - 1, 0),
+                                    new vscode.Position(Number(t.line) - 1, 0)
+                                )
+                            }
+                        ]
+                    };
+                    return node;
+                });
 
-                return new ReportNode(
+                const finding = new ReportNode(
                     label,
                     'finding',
                     traceNodes.length > 0
@@ -112,6 +129,34 @@ export class ReportProvider implements vscode.TreeDataProvider<ReportNode> {
                     traceNodes,
                     f
                 );
+
+                // Make it clickable
+                if (f.file && f.line) {
+                    finding.command = {
+                        command: 'vscode.open',
+                        title: 'Open File',
+                        arguments: [
+                            vscode.Uri.file(path.resolve(srcDir, f.file)),
+                            {
+                                selection: new vscode.Range(
+                                    new vscode.Position(Number(f.line) - 1, 0),
+                                    new vscode.Position(Number(f.line) - 1, 0)
+                                )
+                            }
+                        ]
+                    };
+                }
+                else if (f.file) {
+                    finding.command = {
+                        command: 'vscode.open',
+                        title: 'Open File',
+                        arguments: [
+                            vscode.Uri.file(path.resolve(srcDir, f.file))
+                        ]
+                    };
+                }
+
+                return finding;
             });
 
             groupNodes.push(new ReportNode(
