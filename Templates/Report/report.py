@@ -212,14 +212,34 @@ class Formatter:
                 return True,f.getvalue()
         else:
             return False,f"Format {self.type} not supported !"
-            
+
+def cleanReport(content):
+    try:
+        # for finding duplicates, we created a four ways key (vulnType,file,line,source-variable)
+        seen={}
+        for vuln in content:
+            # we remove all the "call to ..." as a source, it is irrelevant and makes noise
+            if not vuln["source"].startswith("call to"):
+                key=(vuln["type"],vuln["file"],vuln["line"],vuln["source"])
+                if key not in seen:
+                    seen[key]=vuln
+        return list(seen.values())
+    except Exception as e:
+        print(f"An error ocurred while trying to parse the report's content: {e}")
+        return None
+     
 SRC_DIR,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODECHECKER_OUTPUT,OUTPUT_JSON,OUTPUT_CSV=parseArgs()
 report= FullReport(SRC_DIR,PHPSTAN_OUTPUT,PSALM_OUTPUT,CODECHECKER_OUTPUT).report()
 if report is None:
     print("An error ocurred while doing the full report.")
     sys.exit(1)
     
-r,_=Formatter("json").format(report,OUTPUT_JSON)
+clean=cleanReport(report)
+if clean is None:
+    print(f"An error ocurred while cleaning up report")
+    sys.exit(1)
+
+r,_=Formatter("json").format(clean,OUTPUT_JSON)
 if not r:
     print(f"An error ocurred while formatting output to {OUTPUT_JSON}")
     sys.exit(1)
@@ -228,4 +248,6 @@ r,_=Formatter("csv").format(report,OUTPUT_CSV)
 if not r:
     print(f"An error ocurred while formatting output to {OUTPUT_CSV}")
     sys.exit(1)
+
+    
 sys.exit(0)
