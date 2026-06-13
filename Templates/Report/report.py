@@ -68,7 +68,7 @@ class AccessibleFilesReport(Report):
         intersection= [os.path.relpath(f, start=relDir) for f in intersection]
         output=[]
         for file in intersection:
-            output.append({"type": "accessibleNotGuarded","file": file,"line": "","snippet": "","source": "","variable":"","trace": []})
+            output.append({"type": "missingAccessControl","file": file,"line": "","snippet": "","source": "","variable":"","trace": []})
         return output
     
 # This class is a wrapper for Psalm reports
@@ -77,6 +77,7 @@ class PsalmReport(Report):
     def __init__(self,psalmOutputPath):
         self.psalmOutputPath=psalmOutputPath
         self.types=None
+        self.vulnClass=None
         
     def __private_buildTrace(self,error):
         trace={}
@@ -118,7 +119,7 @@ class PsalmReport(Report):
                 trace= self.__private_buildTrace(error)
                 if trace:
                     obj= {
-                        "type": error["type"].strip(),
+                        "type": self.vulnClass.strip(),
                         "file":error["file_name"].strip(),
                         "line":error["line_from"],
                         "snippet":error["snippet"].strip(),
@@ -134,12 +135,14 @@ class SQLIReport(PsalmReport):
     def __init__(self,p):
         super().__init__(p)
         self.types=["TaintedSql"]
+        self.vulnClass="SQLI"
         
 # This one handles vulnerabilities of type "TaintedHtml" for now
 class XSSReport(PsalmReport):
     def __init__(self,p):
         super().__init__(p)
         self.types=["TaintedHtml","TaintedTextWithQuotes"]
+        self.vulnClass="XSS"
     
 # This class does a report of all errors: MissingGaurds, XSS and SQLI
 # We need this custom class so that the format, for example trace number match in case of formatting with csv
