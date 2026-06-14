@@ -8,10 +8,10 @@
  * Run this script with --globals to get the list of all global variables, and adapt both lists depending on it 
  */
 
-$skipDirs= [];
+$skipDirs = ['vendor', 'cron', '.phpwn', 'preprocess.php', 'psalm', 'phpstan'];
 $safePatterns = [];
-$inputPatterns = [];
-$psalmPluginsDir="";
+$inputPatterns = ['request', 'userdata', 'class', /* additional internal variable names redacted for public release */];
+$psalmPluginsDir = "psalm/plugins/globalVarTainter.php";
 
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Node;
@@ -72,7 +72,7 @@ class GlobalVarVisitor extends NodeVisitorAbstract{
 
     private $onlyList=false;
 
-    private $typeMap=[
+    public $typeMap=[
         Array_::class => "array",
         String_::class => "string",
         Int_::class => "int",
@@ -111,7 +111,8 @@ class GlobalVarVisitor extends NodeVisitorAbstract{
                 else{
                     $exprType= $this->typeMap[get_class($expr)] ?? "mixed";
                 }
-                $this->assignments[$var->name]=$exprType;
+                // we use an array instead of variable, and we at the end clean it up to get the more precise type def
+                $this->assignments[$var->name][]=$exprType;
             }
         }
     }
@@ -214,6 +215,26 @@ function modifyPlugin(string $filename, array $taintedGlobals):bool{
     }
 }
 
+function cleanUpDefs(array $assignments, array $primitives){
+    $output=[];
+    foreach($assignments as $var => $types){
+        foreach($types as $type){
+            if(!in_array($type,$primitives) && $type!=="mixed"){
+                $output[$var]=$type;
+                break;
+            }
+            else if(in_array($type,$primitives) && !isset($output[$var])){
+                $output[$var]=$type;
+            }
+        }
+        if(!isset($output[$var])){
+            $output[$var]="mixed";
+        }
+    }
+    return $output;
+}
+
+
 // Parsing command line args
 $listGlobs=false;
 if(count($argv)>1){
@@ -262,6 +283,7 @@ if($listGlobs){
 }
 
 $assignments= $visitor->assignments;
+$assignments=cleanUpDefs($assignments,array_values($visitor->typeMap));
 
 // we now combine assigments and globals to get the type of each global variable
 $globalsTypes=[];
