@@ -234,12 +234,13 @@ if report is None:
     print("An error ocurred while doing the full report.")
     sys.exit(1)
     
-clean=cleanReport(report)
-if clean is None:
-    print(f"An error ocurred while cleaning up report")
-    sys.exit(1)
+#clean=cleanReport(report)
+#if clean is None:
+#    print(f"An error ocurred while cleaning up report")
+#    sys.exit(1)
 
-r,_=Formatter("json").format(clean,OUTPUT_JSON)
+#r,_=Formatter("json").format(clean,OUTPUT_JSON)
+r,_=Formatter("json").format(report,OUTPUT_JSON)
 if not r:
     print(f"An error ocurred while formatting output to {OUTPUT_JSON}")
     sys.exit(1)
