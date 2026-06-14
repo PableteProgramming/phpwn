@@ -2,6 +2,7 @@
   "name": "phpwn",
   "displayName": "phpwn",
   "description": "PHPwn is a tool for static code analysis for pentester",
+  "publisher": "pablo",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.118.0"
@@ -12,6 +13,29 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "phpwn",
+          "title": "PHPwn",
+          "icon": "resources/test.svg"
+        }
+      ]
+    },
+    "views": {
+      "phpwn": [
+        {
+          "id": "phpwnVariables",
+          "name": "PHPwn Variables",
+          "icon": "resources/phpwn.svg"
+        },
+        {
+          "id": "phpwnResults",
+          "name": "PHPwn Results",
+          "icon": "resources/phpwn.svg"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "phpwn.run",
@@ -45,22 +69,12 @@
         "command": "phpwn.refreshVariables",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "phpwn.configure",
+        "title": "PHPwn: Configure"
       }
     ],
-    "views": {
-      "explorer": [
-        {
-          "id": "phpwnResults",
-          "name": "PHPwn Results",
-          "icon": "resources/phpwn.svg"
-        },
-        {
-          "id": "phpwnVariables",
-          "name": "PHPwn Variables",
-          "icon": "resources/phpwn.svg"
-        }
-      ]
-    },
     "menus": {
       "view/item/context": [
         {

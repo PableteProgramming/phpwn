@@ -7,23 +7,23 @@ import { runPHPwn } from './runner';
 
 export function activate(context: vscode.ExtensionContext) {
 
-    // On activation, ensure config file exists in workspace root
-    // If not there yet, we copy the template from the extension's resources
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
-    if (workspaceRoot) {
-        const configPath = path.join(workspaceRoot, 'phpwn.config.json');
-        if (!fs.existsSync(configPath)) {
-            const configTemplate = path.join(context.extensionPath, 'resources', 'phpwn.config.json');
-            fs.copyFileSync(configTemplate, configPath);
-            vscode.window.showInformationMessage('PHPwn: config file ' + configPath + ' created at workspace root. Please configure it before running.');
-        }
+
+    function getConfigPath(): string | null {
+        if (!workspaceRoot) { return null; }
+        return path.join(workspaceRoot, 'phpwn.config.json');
+    }
+
+    function configExists(): boolean {
+        const configPath = getConfigPath();
+        return configPath !== null && fs.existsSync(configPath);
     }
 
     // Helper to get varsFile path from config
     function getVarsFilePath(): string | null {
         if (!workspaceRoot) { return null; }
-        const configPath = path.join(workspaceRoot, 'phpwn.config.json');
-        if (!fs.existsSync(configPath)) { return null; }
+        const configPath = getConfigPath();
+        if (!configPath || !fs.existsSync(configPath)) { return null; }
         const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         return path.resolve(workspaceRoot, config.variablesFile);
     }
@@ -43,17 +43,19 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage('PHPwn: No workspace folder open.');
                 return;
             }
+            if (!configExists()) {
+                vscode.window.showErrorMessage('PHPwn: Please run "PHPwn: Configure" first.');
+                return;
+            }
             try {
                 const result = await runPHPwn(context, workspaceRoot);
                 if (result === 'vars') {
-                    // First run: variables file was created, ask user to categorize
                     const varsFile = getVarsFilePath();
                     if (varsFile) {
                         variablesProvider.refresh(varsFile);
                     }
                     vscode.window.showInformationMessage('PHPwn: Please categorize the variables in the PHPwn Variables panel, then run again.');
                 } else {
-                    // Full run: show results
                     reportProvider.refresh(workspaceRoot);
                 }
             } catch (e) {
@@ -67,6 +69,10 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('phpwn.showReport', () => {
             if (!workspaceRoot) {
                 vscode.window.showErrorMessage('PHPwn: No workspace folder open.');
+                return;
+            }
+            if (!configExists()) {
+                vscode.window.showErrorMessage('PHPwn: Please run "PHPwn: Configure" first.');
                 return;
             }
             reportProvider.refresh(workspaceRoot);
@@ -98,12 +104,32 @@ export function activate(context: vscode.ExtensionContext) {
             reportProvider.refresh(workspaceRoot);
         })
     );
-    
+
     context.subscriptions.push(
         vscode.commands.registerCommand('phpwn.refreshVariables', () => {
             const varsFile = getVarsFilePath();
             if (!varsFile) { return; }
             variablesProvider.refresh(varsFile);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('phpwn.configure', () => {
+            if (!workspaceRoot) {
+                vscode.window.showErrorMessage('PHPwn: No workspace folder open.');
+                return;
+            }
+            const configPath = getConfigPath()!;
+            if (fs.existsSync(configPath)) {
+                vscode.window.showInformationMessage('PHPwn: config file already exists.');
+            } else {
+                const configTemplate = path.join(context.extensionPath, 'resources', 'phpwn.config.json');
+                fs.copyFileSync(configTemplate, configPath);
+                vscode.window.showInformationMessage('PHPwn: config file created. Please configure it before running.');
+            }
+            vscode.workspace.openTextDocument(configPath).then(doc => {
+                vscode.window.showTextDocument(doc);
+            });
         })
     );
 }
