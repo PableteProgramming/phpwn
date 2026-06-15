@@ -83,9 +83,6 @@ class PsalmReport(Report):
         trace={}
         for traceEntry in error["taint_trace"]:
             try:
-                if False: #traceEntry["label"].startswith("call to"): # we gotta make this better
-                    # we skip redundant entries like "call to"
-                    continue
                 label=traceEntry['label']
                 file=traceEntry['file_name']
                 line=traceEntry['line_from']

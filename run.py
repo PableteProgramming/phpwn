@@ -115,8 +115,8 @@ def run():
         return False
     
     try:
-        os.remove(os.path.join(outDir,CODEBASECHECK_OUTPUT))
-        os.remove(os.path.join(outDir,PSALM_OUTPUT))
+        #os.remove(os.path.join(outDir,CODEBASECHECK_OUTPUT))
+        #os.remove(os.path.join(outDir,PSALM_OUTPUT))
         os.remove(os.path.join(outDir,PHPSTAN_OUTPUT))
         os.remove(os.path.join(outDir,"report.py"))
     except Exception as e:
