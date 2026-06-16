@@ -98,9 +98,9 @@ def runCommandOrFail(command,wd,allowCodes=[0],output=False):
     try:
         result= subprocess.run(command,cwd=wd,capture_output=True,text=True)
         if result.returncode not in allowCodes:
-            print(f"stdout: {result.stdout}")
-            print(f"stderr: {result.stderr}")
-            print(f"return code: {result.returncode}")
+            print(f"STDOUT:\n {result.stdout}\n"+"-"*20)
+            print(f"STDERR:\n {result.stderr}\n"+"-"*20)
+            print(f"RETURN CODE: {result.returncode}"+"-"*20)
             if output:
                 return False,""
             else:
@@ -153,6 +153,7 @@ def setup():
     srcDir, outDir, excludes, safePatterns, inputPatterns,vars,varsFile = parseArgs()
     
     excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR])
+    currentDir=os.path.dirname(os.path.abspath(__file__))
     
     # we first copy the source dir into the temp dir
     print(f"[+] Creating {outDir} and copying source code")
@@ -161,7 +162,7 @@ def setup():
     except FileNotFoundError as e:
         pass
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"[!] An error occurred: {e}")
         return False
     
     srcBaseName= os.path.basename(os.path.normpath(srcDir))
@@ -171,7 +172,7 @@ def setup():
     psalmDir= os.path.join(srcPath,PSALM_DIR)
     psalmStubsDir=os.path.join(psalmDir,PSALM_STUB_DIR)
     psalmPluginsDir=os.path.join(psalmDir,PSALM_PLUGIN_DIR)
-    psalmTemplatesDir= os.path.join(TEMPLATE_DIR,"Psalm")
+    psalmTemplatesDir= os.path.join(currentDir,TEMPLATE_DIR,"Psalm")
     os.mkdir(psalmDir)
     os.mkdir(psalmStubsDir)
     os.mkdir(psalmPluginsDir)
@@ -183,7 +184,7 @@ def setup():
         if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"skipDirs",f"[{buildPhpArray(excludes)}];"):
             print(f"[+] Excludes where appended to preprocess.php")
         else:
-            print(f"An error occurred while trying to append excludes to preprocess.php")
+            print(f"[!] An error occurred while trying to append excludes to preprocess.php")
             return False
         print("[+] Installing Psalm")
         if not runCommandOrFail(["composer", "require", "--dev","vimeo/psalm"],srcPath):
@@ -194,13 +195,13 @@ def setup():
             return False
         try:
             f= open(varsFile,"w")
-            output = output[output.find('['):] # in case some error get's printed but the json still there
+            output = output[output.find('[{'):] # in case some error get's printed but the json still there
             json.dump(json.loads(output),f,indent=2)
             f.close()
         except Exception as e:
             print(f"An error ocurred while writing output of preprocess.php to {varsFile}: {e}")
             return False
-        #shutil.rmtree(outDir)
+        shutil.rmtree(outDir)
         return True
     
     print(f"[+] Copying all Psalm important setup files")
@@ -221,49 +222,49 @@ def setup():
     if addXml(os.path.join(srcPath,"psalm.xml"),"projectFiles/ignoreFiles","file",excludesFiles):
         print(f"[+] Excludes files where appended to psalm.xml")
     else:
-        print(f"An error occurred while trying to append excludes files to psalm.xml")
+        print(f"[!] An error occurred while trying to append excludes files to psalm.xml")
         return False
     
     if addXml(os.path.join(srcPath,"psalm.xml"),"projectFiles/ignoreFiles","directory",excludesDirs):
         print(f"[+] Excludes dirs where appended to psalm.xml")
     else:
-        print(f"An error occurred while trying to append excludes dirs to psalm.xml")
+        print(f"[!] An error occurred while trying to append excludes dirs to psalm.xml")
         return False
     
     if addXml(os.path.join(srcPath,"psalm.xml"),"stubs","file",[{"name":os.path.join(PSALM_DIR,PSALM_STUB_DIR,"defs.php")}]):
         print(f"[+] Stubs where appended to psalm.xml")
     else:
-        print(f"An error occurred while trying to append stubs to psalm.xml")
+        print(f"[!] An error occurred while trying to append stubs to psalm.xml")
         return False
     
     if addXml(os.path.join(srcPath,"psalm.xml"),"plugins","plugin",[{"filename":os.path.join(PSALM_DIR,PSALM_PLUGIN_DIR,"globalVarTainter.php")}]):
         print(f"[+] Plugins where appended to psalm.xml")
     else:
-        print(f"An error occurred while trying to append plugins to psalm.xml")
+        print(f"[!] An error occurred while trying to append plugins to psalm.xml")
         return False
     
     if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"skipDirs",f"[{buildPhpArray(excludes)}];"):
         print(f"[+] Excludes where appended to preprocess.php")
     else:
-        print(f"An error occurred while trying to append excludes to preprocess.php")
+        print(f"[!] An error occurred while trying to append excludes to preprocess.php")
         return False
     
     if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"safePatterns",f"[{buildPhpArray(safePatterns)}];"):
         print(f"[+] Safe patterns where appended to preprocess.php")
     else:
-        print(f"An error occurred while trying to append safe patterns to preprocess.php")
+        print(f"[!] An error occurred while trying to append safe patterns to preprocess.php")
         return False
     
     if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"inputPatterns",f"[{buildPhpArray(inputPatterns)}];"):
         print(f"[+] Input patterns where appended to preprocess.php")
     else:
-        print(f"An error occurred while trying to append safe patterns to preprocess.php")
+        print(f"[!] An error occurred while trying to append safe patterns to preprocess.php")
         return False
     
     if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"psalmPluginsDir",f'"{os.path.join(PSALM_DIR,PSALM_PLUGIN_DIR,"globalVarTainter.php")}";'):
         print(f"[+] psalm variable where appended to preprocess.php")
     else:
-        print(f"An error occurred while trying to append psalm variable to preprocess.php")
+        print(f"[!] An error occurred while trying to append psalm variable to preprocess.php")
         return False
     
     print("[+] Installing Psalm")
@@ -280,23 +281,23 @@ def setup():
     phpstanRulesDir= os.path.join(phptanDir,PHPSTAN_RULES_DIR)
     os.mkdir(phptanDir)
     os.mkdir(phpstanRulesDir)
-    for file in Path(os.path.join(TEMPLATE_DIR,"PHPStan")).glob("*.php"):
+    for file in Path(os.path.join(currentDir,TEMPLATE_DIR,"PHPStan")).glob("*.php"):
         shutil.copy(file, os.path.join(phpstanRulesDir,file.name))
         
-    shutil.copy(os.path.join(TEMPLATE_DIR,"PHPStan","phpstan.neon"),os.path.join(srcPath,"phpstan.neon"))
+    shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"PHPStan","phpstan.neon"),os.path.join(srcPath,"phpstan.neon"))
     
     print("[+] Applying excludes and custom Rules to phpstan.neon")
     excludesBlock="\n".join([f"        - {d}" for d in excludes])
     if replaceInFile(os.path.join(srcPath,"phpstan.neon"),"# EXCLUDE_PLACEHOLDER",excludesBlock):
         print("[+] excludes replaced successfully")
     else:
-        print("An error ocurred while writing excludes to phpstan.neon")
+        print("[!] An error ocurred while writing excludes to phpstan.neon")
         return False
         
     if replaceInFile(os.path.join(srcPath,"phpstan.neon"),"# SCANDIR_PLACEHOLDER",f"        - {os.path.join(PHPSTAN_DIR,PHPSTAN_RULES_DIR)}"):
         print("[+] scanDir replaced successfully")
     else:
-        print("An error ocurred while writing scanDir to phpstan.neon")
+        print("[!] An error ocurred while writing scanDir to phpstan.neon")
         return False
         
     base= re.sub(r'[^a-zA-Z0-9]','',srcBaseName.rstrip("/\\"))
@@ -305,13 +306,13 @@ def setup():
     if replaceInFile(os.path.join(srcPath,"phpstan.neon"),"# RULES_PLACEHOLDER",rulesBlock):
         print("[+] rules replaced successfully")
     else:
-        print("An error append while writing rules to phpstan.neon")
+        print("[!] An error append while writing rules to phpstan.neon")
         return False
         
     if updateComposer(os.path.join(srcPath,"composer.json"),namespace,PHPSTAN_DIR+"/"):
         print("[+] composer.json got updated")
     else:
-        print("An error ocurred while updating composer.json")
+        print("[!] An error ocurred while updating composer.json")
         return False
         
     print("[+] Running dump-autoload")
@@ -324,15 +325,15 @@ def setup():
             if replaceInFile(os.path.join(phpstanRulesDir,os.path.basename(os.path.normpath(f))),"namespace $NAMESPACE;",f"namespace {namespace}{PHPSTAN_RULES_DIR};"):
                 print(f"[+] namespace replaced successfully in {f}")
             else:
-                print("An error append while replacing namespaces in the rules")
+                print("[!] An error append while replacing namespaces in the rules")
                 return False 
             
     print("[+] Installing PHPStan")
     if not runCommandOrFail(["composer", "require", "--dev","phpstan/phpstan"],srcPath):
         return False
     
-    shutil.copy(os.path.join(TEMPLATE_DIR,"CodebaseCheck","codebaseCheck.py"),os.path.join(srcPath,"codebaseCheck.py"))
-    shutil.copy(os.path.join(TEMPLATE_DIR,"Report","report.py"),os.path.join(outDir,"report.py"))
+    shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"CodebaseCheck","codebaseCheck.py"),os.path.join(srcPath,"codebaseCheck.py"))
+    shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"Report","report.py"),os.path.join(outDir,"report.py"))
     return True
     
 if __name__=="__main__":

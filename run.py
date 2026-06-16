@@ -34,9 +34,9 @@ def runCommandOrFail(command,wd,allowCodes=[0],output=False):
     try:
         result= subprocess.run(command,cwd=wd,capture_output=True,text=True)
         if result.returncode not in allowCodes:
-            print(f"stdout: {result.stdout}")
-            print(f"stderr: {result.stderr}")
-            print(f"return code: {result.returncode}")
+            print(f"STDOUT:\n {result.stdout}\n"+"-"*20)
+            print(f"STDERR:\n {result.stderr}\n"+"-"*20)
+            print(f"RETURN CODE: {result.returncode}"+"-"*20)
             if output:
                 return False,""
             else:
@@ -68,7 +68,7 @@ def run():
         json.dump(json.loads(out),f,indent=2)
         f.close()
     except Exception as e:
-        print(f"An error ocurred while trying to store the results of psalm in {PSALM_OUTPUT}: {e}")
+        print(f"[!] An error ocurred while trying to store the results of psalm in {PSALM_OUTPUT}: {e}")
         return False
     
     print("[+] Running PHPStan. This may take a while...")
@@ -83,7 +83,7 @@ def run():
         json.dump(json.loads(out),f,indent=2)
         f.close()
     except Exception as e:
-        print(f"An error ocurred while trying to store the results of PHPStan in {PHPSTAN_OUTPUT}: {e}")
+        print(f"[!] An error ocurred while trying to store the results of PHPStan in {PHPSTAN_OUTPUT}: {e}")
         return False
     
     print("[+] Running codebaseCheck. This may take a while...")
@@ -102,12 +102,12 @@ def run():
         return False
         
     try:
-        #shutil.rmtree(srcPath)
+        shutil.rmtree(srcPath)
         pass
     except FileNotFoundError as e:
         pass
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"[!] An error occurred: {e}")
         return False
         
     print("[+] Running report.py. This may take a while...")
@@ -115,12 +115,12 @@ def run():
         return False
     
     try:
-        #os.remove(os.path.join(outDir,CODEBASECHECK_OUTPUT))
-        #os.remove(os.path.join(outDir,PSALM_OUTPUT))
+        os.remove(os.path.join(outDir,CODEBASECHECK_OUTPUT))
+        os.remove(os.path.join(outDir,PSALM_OUTPUT))
         os.remove(os.path.join(outDir,PHPSTAN_OUTPUT))
         os.remove(os.path.join(outDir,"report.py"))
     except Exception as e:
-        print("An error ocurred while cleaning up.")
+        print("[!] An error ocurred while cleaning up.")
         return False
         
     return True
