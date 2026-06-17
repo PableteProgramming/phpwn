@@ -5,7 +5,7 @@ import os
 def createZip(name):
     try:
         f=zipfile.ZipFile(name,"w",zipfile.ZIP_DEFLATED)
-        for file in ["PHPwn.py", "setup.py","run.py","wrapper.py","requirements.txt"]:
+        for file in ["PHPwn.py", "setup.py","run.py","wrapper.py","requirements.txt", "Readme.md"]:
             f.write(file)
         for dirpath, _, files in os.walk("Templates"):
             for file in files:
@@ -23,6 +23,7 @@ def release():
         shutil.copy("../run.py","run.py")
         shutil.copy("../wrapper.py","wrapper.py")
         shutil.copy("../requirements.txt","requirements.txt")
+        shutil.copy("../Readme.md","Readme.md")
         createZip("PHPwn.zip")
         shutil.rmtree("Templates")
         os.remove("PHPwn.py")
@@ -30,6 +31,7 @@ def release():
         os.remove("run.py")
         os.remove("wrapper.py")
         os.remove("requirements.txt")
+        os.remove("Readme.md")
     except FileNotFoundError:
         pass
     except Exception as e:
