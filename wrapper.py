@@ -15,8 +15,10 @@ def parseArgs():
     parser.add_argument("--output-json", "-j", type=str, default="result.json", help="Report filename for json format")
     parser.add_argument("--output-csv", "-c", type=str, default="result.csv", help="Report filename for CSV format")
     parser.add_argument("--direct-serving", "-d", action="store_true", help="If the files are directly served on production. For accessible files check.")
+    parser.add_argument("--htaccess-path","-H",type=str, default=".htaccess", help="The path of the .htaccess file from the root dir.")
+    parser.add_argument("--accessible-files","-a",action="store_true",help="Pass this if you want PHPwn to check for accessbile files based on an .htaccess routing file.")
     args= parser.parse_args()
-    return args.src_dir,args.out_dir,args.excludes,args.vars_file,args.output_json,args.output_csv,args.direct_serving
+    return args.src_dir,args.out_dir,args.excludes,args.vars_file,args.output_json,args.output_csv,args.direct_serving,args.htaccess_path,args.accessible_files
 
 def runCommandOrFail(command,wd,allowCodes=[0],output=False):
     try:
@@ -60,7 +62,7 @@ def buildPatternsList(varsFile):
         return False,[],[]
 
 def main():
-    srcDir,outDir,excludes,varsFile,outputJson,outputCsv,directServing= parseArgs()
+    srcDir,outDir,excludes,varsFile,outputJson,outputCsv,directServing,htaccessPath,accessibleFiles= parseArgs()
     
     if not os.path.exists(varsFile):
         # if the file is not existing yet, we need to create it, and let the user choose.
@@ -75,11 +77,11 @@ def main():
         return False
     
     print("[+] Setting up PHPwn...")
-    if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir,"--excludes",*excludes,"--safe-patterns",*safePatterns,"--input-patterns",*inputPatterns],os.getcwd()):
+    if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir,"--excludes",*excludes,"--safe-patterns",*safePatterns,"--input-patterns",*inputPatterns]+(["--accessible-files"] if accessibleFiles else []),os.getcwd()):
         print("[!] An error ocurred during setup. Exiting...")
         return False
     print("[+] Starting analysis. This may take a while...")
-    if not runCommandOrFail([sys.executable, "run.py", srcDir,outDir,"--output-json",outputJson,"--output-csv",outputCsv]+(["--direct-serving"] if directServing else []),os.getcwd()):
+    if not runCommandOrFail([sys.executable, "run.py", srcDir,outDir,"--output-json",outputJson,"--output-csv",outputCsv]+(["--direct-serving"] if directServing else [])+(["--accessible-files", "--htaccess-path", htaccessPath] if accessibleFiles else []),os.getcwd()):
         print("[!] An error ocurred during analysis. Exiting...")
         return False
     print("[+] Analysis done !")

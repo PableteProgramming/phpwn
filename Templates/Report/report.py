@@ -17,8 +17,9 @@ def parseArgs():
     # Optional flags
     parser.add_argument("--output-json", "-j", type=str, default="result.json", help="Report filename for json format")
     parser.add_argument("--output-csv", "-c", type=str, default="result.csv", help="Report filename for CSV format")
+    parser.add_argument("--accessible-files","-a",action="store_true",help="Pass this if you want PHPwn to check for accessbile files based on an .htaccess routing file.")
     args= parser.parse_args()
-    return args.src_dir,args.psalm_output,args.phpstan_output,args.codechecker_output,args.output_json,args.output_csv
+    return args.src_dir,args.psalm_output,args.phpstan_output,args.codechecker_output,args.output_json,args.output_csv,args.accessible_files
 
 # Each Report type must implement the report method.
 class Report(ABC):
@@ -144,19 +145,23 @@ class XSSReport(PsalmReport):
 # This class does a report of all errors: MissingGaurds, XSS and SQLI
 # We need this custom class so that the format, for example trace number match in case of formatting with csv
 class FullReport(Report):
-    def __init__(self,srcDir,phpStanOutput,psalmOutput,codeCheckerOutput):
+    def __init__(self,srcDir,phpStanOutput,psalmOutput,codeCheckerOutput,accessibleFiles):
         self.phpStanOutput=phpStanOutput
         self.psalmOutput=psalmOutput
         self.codeCheckerOutput=codeCheckerOutput
         self.srcDir=srcDir
+        self.accessibleFiles=accessibleFiles
         
     def report(self):
-        accessibleFiles=AccessibleFilesReport(self.phpStanOutput,self.codeCheckerOutput,self.srcDir).report()
+        if self.accessibleFiles:
+            a=AccessibleFilesReport(self.phpStanOutput,self.codeCheckerOutput,self.srcDir).report()
+        else:
+            a=[]
         sqliOutput=SQLIReport(self.psalmOutput).report()
         xssOutput=XSSReport(self.psalmOutput).report()
-        if accessibleFiles is None or sqliOutput is None or xssOutput is None:
+        if a is None or sqliOutput is None or xssOutput is None:
             return None
-        return accessibleFiles+sqliOutput+xssOutput
+        return a+sqliOutput+xssOutput
     
 # This class formats the output of the reports for user readability
 class Formatter:
@@ -225,8 +230,8 @@ def cleanReport(content):
         print(f"An error ocurred while trying to parse the report's content: {e}")
         return None
      
-SRC_DIR,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODECHECKER_OUTPUT,OUTPUT_JSON,OUTPUT_CSV=parseArgs()
-report= FullReport(SRC_DIR,PHPSTAN_OUTPUT,PSALM_OUTPUT,CODECHECKER_OUTPUT).report()
+SRC_DIR,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODECHECKER_OUTPUT,OUTPUT_JSON,OUTPUT_CSV,accessibleFiles=parseArgs()
+report= FullReport(SRC_DIR,PHPSTAN_OUTPUT,PSALM_OUTPUT,CODECHECKER_OUTPUT,accessibleFiles).report()
 if report is None:
     print("An error ocurred while doing the full report.")
     sys.exit(1)

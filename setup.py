@@ -74,8 +74,9 @@ def parseArgs():
     parser.add_argument("--input-patterns", "-i", nargs="+", default=[], help="Patterns for input variables.")
     parser.add_argument("--vars","-v",action="store_true",help="Pass this variable to get a list of global variables.")
     parser.add_argument("--vars-file","-f",type=str,default="phpwn.vars.json", help="The path of the file with the variables.")
+    parser.add_argument("--accessible-files","-a",action="store_true",help="Pass this if you want PHPwn to check for accessbile files based on an .htaccess routing file.")
     args= parser.parse_args()
-    return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.input_patterns,args.vars,args.vars_file
+    return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.input_patterns,args.vars,args.vars_file,args.accessible_files
 
 def buildPhpArray(elements):
     return ", ".join(f"'{elem}'" for elem in elements)
@@ -150,7 +151,7 @@ def updateComposer(filename,namespace,dir):
         return False
         
 def setup():
-    srcDir, outDir, excludes, safePatterns, inputPatterns,vars,varsFile = parseArgs()
+    srcDir, outDir, excludes, safePatterns, inputPatterns,vars,varsFile, accessibleFiles = parseArgs()
     
     excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR])
     currentDir=os.path.dirname(os.path.abspath(__file__))
@@ -332,7 +333,8 @@ def setup():
     if not runCommandOrFail(["composer", "require", "--dev","phpstan/phpstan"],srcPath):
         return False
     
-    shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"CodebaseCheck","codebaseCheck.py"),os.path.join(srcPath,"codebaseCheck.py"))
+    if accessibleFiles:
+        shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"CodebaseCheck","codebaseCheck.py"),os.path.join(srcPath,"codebaseCheck.py"))
     shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"Report","report.py"),os.path.join(outDir,"report.py"))
     return True
     

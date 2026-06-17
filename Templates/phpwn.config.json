@@ -1,9 +1,14 @@
 {
+  "info":"See README.md for more information about this configuration file.",
   "target": ".",
   "outputDir": "out/",
   "outputJson": "report.json",
   "outputCsv": "report.csv",
   "excludes": ["vendor",".phpwn"],
   "variablesFile": "phpwn.vars.json",
-  "directServing": true
+  "accessibleFiles":{
+    "enabled":true,
+    "directServing":true,
+    "htaccessPath":".htaccess"
+  }
 }

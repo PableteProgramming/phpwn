@@ -27,8 +27,10 @@ def parseArgs():
     parser.add_argument("--output-json", "-j", type=str, default="result.json", help="Report filename for json format")
     parser.add_argument("--output-csv", "-c", type=str, default="result.csv", help="Report filename for CSV format")
     parser.add_argument("--direct-serving", "-d", action="store_true", help="If the files are directly served on production. For accessible files check.")
+    parser.add_argument("--htaccess-path","-H",type=str, default=".htaccess", help="The path of the .htaccess file from the root dir.")
+    parser.add_argument("--accessible-files","-a",action="store_true",help="Pass this if you want PHPwn to check for accessbile files based on an .htaccess routing file.")
     args= parser.parse_args()
-    return args.src_dir,args.out_dir,args.output_json,args.output_csv,args.direct_serving
+    return args.src_dir,args.out_dir,args.output_json,args.output_csv,args.direct_serving,args.htaccess_path,args.accessible_files
 
 def runCommandOrFail(command,wd,allowCodes=[0],output=False):
     try:
@@ -53,7 +55,7 @@ def runCommandOrFail(command,wd,allowCodes=[0],output=False):
             return False
 
 def run():
-    srcDir,outDir,outputJson,outputCsv,directServing= parseArgs()
+    srcDir,outDir,outputJson,outputCsv,directServing,htaccessPath,accessibleFiles= parseArgs()
     srcPath= os.path.join(outDir,os.path.basename(os.path.normpath(srcDir)))
     
     print("[+] Running Psalm. This may take a while...")
@@ -86,20 +88,22 @@ def run():
         print(f"[!] An error ocurred while trying to store the results of PHPStan in {PHPSTAN_OUTPUT}: {e}")
         return False
     
-    print("[+] Running codebaseCheck. This may take a while...")
-    ok,out=runCommandOrFail([sys.executable, "codebaseCheck.py", ".htaccess",".","--format=json"]+(["--direct-serving"] if directServing else []),srcPath,output=True)
-    if not ok:
-        return False
     
-    try:
-        if os.path.exists(os.path.join(outDir,CODEBASECHECK_OUTPUT)):
-            os.remove(os.path.join(outDir,CODEBASECHECK_OUTPUT))
-        f= open(os.path.join(outDir,CODEBASECHECK_OUTPUT),"w")
-        json.dump(json.loads(out),f,indent=2)
-        f.close()
-    except Exception as e:
-        print(f"An error ocurred while trying to store the results of codebaseCheck in {CODEBASECHECK_OUTPUT}: {e}")
-        return False
+    if accessibleFiles:
+        print("[+] Running codebaseCheck. This may take a while...")
+        ok,out=runCommandOrFail([sys.executable, "codebaseCheck.py", htaccessPath,".","--format=json"]+(["--direct-serving"] if directServing else []),srcPath,output=True)
+        if not ok:
+            return False
+        
+        try:
+            if os.path.exists(os.path.join(outDir,CODEBASECHECK_OUTPUT)):
+                os.remove(os.path.join(outDir,CODEBASECHECK_OUTPUT))
+            f= open(os.path.join(outDir,CODEBASECHECK_OUTPUT),"w")
+            json.dump(json.loads(out),f,indent=2)
+            f.close()
+        except Exception as e:
+            print(f"An error ocurred while trying to store the results of codebaseCheck in {CODEBASECHECK_OUTPUT}: {e}")
+            return False
         
     try:
         shutil.rmtree(srcPath)
@@ -111,11 +115,12 @@ def run():
         return False
         
     print("[+] Running report.py. This may take a while...")
-    if not runCommandOrFail([sys.executable, "report.py", srcDir,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODEBASECHECK_OUTPUT,"--output-json",outputJson,"--output-csv",outputCsv],outDir):
+    if not runCommandOrFail([sys.executable, "report.py", srcDir,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODEBASECHECK_OUTPUT,"--output-json",outputJson,"--output-csv",outputCsv]+(["--accessible-files"] if accessibleFiles else []),outDir):
         return False
     
     try:
-        os.remove(os.path.join(outDir,CODEBASECHECK_OUTPUT))
+        if accessibleFiles:
+            os.remove(os.path.join(outDir,CODEBASECHECK_OUTPUT))
         os.remove(os.path.join(outDir,PSALM_OUTPUT))
         os.remove(os.path.join(outDir,PHPSTAN_OUTPUT))
         os.remove(os.path.join(outDir,"report.py"))
