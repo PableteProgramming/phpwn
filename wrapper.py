@@ -68,7 +68,7 @@ def main():
         if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir,"--excludes",*excludes,"--vars","--vars-file",varsFile],os.getcwd()):
             print("[!] An error ocurred during setup. Exiting...")
             return False
-        return True
+        return None # not true, because variables config
 
     ok,safePatterns,inputPatterns= buildPatternsList(varsFile)
     if not ok:
@@ -86,6 +86,9 @@ def main():
     return True
 
 if __name__=="__main__":
-    if main():
+    code=main()
+    if code==True:
         sys.exit(0)
+    elif code is None:
+        sys.exit(2)
     sys.exit(1)

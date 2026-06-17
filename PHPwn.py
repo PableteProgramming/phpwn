@@ -70,12 +70,17 @@ def main():
         srcDirAbs= Path(os.path.realpath(os.path.join(currentDir,srcDir,config["target"]))).absolute()
         outDirAbs=Path(os.path.realpath(os.path.join(currentDir,srcDir,config["outputDir"]))).absolute()
         varsFileAbs=Path(os.path.realpath(os.path.join(currentDir,srcDir,config["variablesFile"]))).absolute()
-        if not runCommandOrFail([sys.executable, "wrapper.py", srcDirAbs,outDirAbs,"--excludes",*config["excludes"],"--vars-file",varsFileAbs,"--output-json",config["outputJson"],"--output-csv",config["outputCsv"]]+(["--direct-serving"] if config["directServing"] else []),os.getcwd()):
+        vars= os.path.exists(varsFileAbs)
+        if not runCommandOrFail([sys.executable, "wrapper.py", srcDirAbs,outDirAbs,"--excludes",*config["excludes"],"--vars-file",varsFileAbs,"--output-json",config["outputJson"],"--output-csv",config["outputCsv"]]+(["--direct-serving"] if config["directServing"] else []),os.getcwd(),[0,2]):
             print(f"[!] An error ocurred while calling wrapper.py")
             return False 
+        return True if vars else None
     
 if __name__=="__main__":
-    if main():
+    code= main()
+    if code==True:
         print(f"[+] Done")
         sys.exit(0)
+    elif code is None: #vars
+        sys.exit(2)
     sys.exit(1)
