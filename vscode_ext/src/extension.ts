@@ -121,18 +121,23 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             const configPath = getConfigPath()!;
+            const openConfig = () => {
+                vscode.workspace.openTextDocument(configPath).then(doc => {
+                    vscode.window.showTextDocument(doc);
+                });
+            };
             if (fs.existsSync(configPath)) {
                 vscode.window.showInformationMessage('PHPwn: config file already exists.');
+                openConfig();
             } else {
                 configurePHPwn(context, workspaceRoot).then(() => {
                     vscode.window.showInformationMessage('PHPwn: Configuration complete! Please run "PHPwn: Run Analysis" to start.');
+                    openConfig();
                 }).catch(e => {
                     vscode.window.showErrorMessage(`PHPwn: Configuration failed: ${e}`);
                 });
             }
-            vscode.workspace.openTextDocument(configPath).then(doc => {
-                vscode.window.showTextDocument(doc);
-            });
+
         })
     );
 }
