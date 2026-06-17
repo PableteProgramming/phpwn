@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ReportProvider } from './reportProvider';
 import { VariablesProvider } from './variablesProvider';
-import { runPHPwn } from './runner';
+import { runPHPwn, configurePHPwn } from './runner';
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -113,6 +113,7 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // the command to configure PHPwn.
     context.subscriptions.push(
         vscode.commands.registerCommand('phpwn.configure', () => {
             if (!workspaceRoot) {
@@ -123,9 +124,11 @@ export function activate(context: vscode.ExtensionContext) {
             if (fs.existsSync(configPath)) {
                 vscode.window.showInformationMessage('PHPwn: config file already exists.');
             } else {
-                const configTemplate = path.join(context.extensionPath, 'resources', 'phpwn.config.json');
-                fs.copyFileSync(configTemplate, configPath);
-                vscode.window.showInformationMessage('PHPwn: config file created. Please configure it before running.');
+                configurePHPwn(context, workspaceRoot).then(() => {
+                    vscode.window.showInformationMessage('PHPwn: Configuration complete! Please run "PHPwn: Run Analysis" to start.');
+                }).catch(e => {
+                    vscode.window.showErrorMessage(`PHPwn: Configuration failed: ${e}`);
+                });
             }
             vscode.workspace.openTextDocument(configPath).then(doc => {
                 vscode.window.showTextDocument(doc);

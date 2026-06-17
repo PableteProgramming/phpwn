@@ -19,13 +19,14 @@ function getVenvPython(workspaceRoot: string): string {
     return path.join(base, '.venv', 'bin', 'python3');
 }
 
-function runCommand(cmd: string, cwd: string): Promise<void> {
+function runCommand(cmd: string, cwd: string): Promise<number> {
     return new Promise((resolve, reject) => {
         const proc = cp.exec(cmd, { cwd }, (error, stdout, stderr) => {
-            if (error) {
+            if (error && error.code === undefined) {
+                // Truly failed to spawn (e.g. command not found)
                 reject(new Error(`${stderr}\n${stdout}`));
             } else {
-                resolve();
+                resolve(error?.code ?? 0);
             }
         });
     });
@@ -66,36 +67,7 @@ async function setupVenv(workspaceRoot: string): Promise<void> {
     await runCommand(`"${pip}" install -r requirements.txt`, extractDir);
 }
 
-function buildArgs(config: any, workspaceRoot: string): string {
-    const target = path.resolve(workspaceRoot, config.target);
-    const outputDir = path.resolve(workspaceRoot, config.outputDir);
-    const varsFile = path.resolve(workspaceRoot, config.variablesFile);
-
-    const args: string[] = [
-        `"${target}"`,
-        `"${outputDir}"`,
-        `--output-json ${config.outputJson}`,
-        `--output-csv ${config.outputCsv}`,
-        `--vars-file "${varsFile}"`,
-    ];
-
-    if (config.excludes?.length) {
-        args.push(`--excludes ${config.excludes.join(' ')} ${PHPWN_DIR}`);
-    }
-    if (config.directServing) {
-        args.push('--direct-serving');
-    }
-
-    return args.join(' ');
-}
-
-export async function runPHPwn(context: vscode.ExtensionContext, workspaceRoot: string): Promise<'vars' | 'done'> {
-    const configPath = path.join(workspaceRoot, 'phpwn.config.json');
-    if (!fs.existsSync(configPath)) {
-        throw new Error('phpwn.config.json not found in workspace root.');
-    }
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-
+export async function configurePHPwn(context: vscode.ExtensionContext, workspaceRoot: string): Promise<void> {
     await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
         title: 'PHPwn',
@@ -107,21 +79,54 @@ export async function runPHPwn(context: vscode.ExtensionContext, workspaceRoot: 
         progress.report({ message: 'Setting up virtual environment...' });
         await setupVenv(workspaceRoot);
 
-        progress.report({ message: 'Running analysis...' });
+        progress.report({ message: 'Configuring PHPwn...' });
         const extractDir = getExtractDir(workspaceRoot);
         const python = getVenvPython(workspaceRoot);
-        const args = buildArgs(config, workspaceRoot);
 
-        const outputDir = path.resolve(workspaceRoot, config.outputDir);
-        fs.mkdirSync(outputDir, { recursive: true });
+        console.log('extractDir: ' + extractDir);
+        console.log('passed dir: ' + path.relative(extractDir, workspaceRoot));
 
-        await runCommand(`"${python}" PHPwn.py ${args}`, extractDir);
+        await runCommand(`"${python}" PHPwn.py --configure ${path.relative(extractDir, workspaceRoot)}`, extractDir);
     });
+}
 
-    const reportFile = path.resolve(workspaceRoot, config.outputDir, config.outputJson);
-    if (fs.existsSync(reportFile)) {
-        vscode.window.showInformationMessage('PHPwn: Analysis complete!');
-        return 'done';
+export async function runPHPwn(context: vscode.ExtensionContext, workspaceRoot: string): Promise<'vars' | 'done'> {
+    const configPath = path.join(workspaceRoot, 'phpwn.config.json');
+    if (!fs.existsSync(configPath)) {
+        throw new Error('phpwn.config.json not found in workspace root.');
     }
-    return 'vars';
+
+    const extractDir = getExtractDir(workspaceRoot);
+    const python = getVenvPython(workspaceRoot);
+
+    if (!fs.existsSync(extractDir)) {
+        throw new Error('PHPwn is not configured. Please run "PHPwn: Configure" first.');
+    }
+
+    if (!fs.existsSync(python)) {
+        throw new Error('PHPwn virtual environment is not set up. Please run "PHPwn: Configure" first.');
+    }
+    let result: 'vars' | 'done' | undefined;
+
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'PHPwn',
+        cancellable: false
+    }, async (progress) => {
+        progress.report({ message: 'Running analysis...' });
+        const code = await runCommand(`"${python}" PHPwn.py ${path.relative(extractDir, workspaceRoot)}`, extractDir);
+        if (code === 0) {
+            vscode.window.showInformationMessage('PHPwn: Analysis complete!');
+            result='done';
+        }
+        else if (code === 2) {
+            // Code 2 means we need user input on variable categorization
+            vscode.window.showInformationMessage('PHPwn: Variables analysis complete!');
+            result='vars';
+        }
+        else {
+            throw new Error(`PHPwn analysis failed with exit code ${code}.`);
+        }
+    });
+    return result!;
 }
