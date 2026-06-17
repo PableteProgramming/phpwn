@@ -242,15 +242,14 @@ if report is None:
 #    sys.exit(1)
 
 #r,_=Formatter("json").format(clean,OUTPUT_JSON)
-r,_=Formatter("json").format(report,OUTPUT_JSON)
+r,err=Formatter("json").format(report,OUTPUT_JSON)
 if not r:
-    print(f"An error ocurred while formatting output to {OUTPUT_JSON}")
+    print(f"An error ocurred while formatting output to {OUTPUT_JSON}: {err}")
     sys.exit(1)
     
-r,_=Formatter("csv").format(report,OUTPUT_CSV)
+r,err=Formatter("csv").format(report,OUTPUT_CSV)
 if not r:
-    print(f"An error ocurred while formatting output to {OUTPUT_CSV}")
+    print(f"An error ocurred while formatting output to {OUTPUT_CSV}: {err}")
     sys.exit(1)
 
-    
 sys.exit(0)

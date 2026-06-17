@@ -107,7 +107,6 @@ def run():
         
     try:
         shutil.rmtree(srcPath)
-        pass
     except FileNotFoundError as e:
         pass
     except Exception as e:
