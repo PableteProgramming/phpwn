@@ -46,19 +46,24 @@
         "title": "PHPwn: Load Report"
       },
       {
-        "command": "phpwn.markSafe",
-        "title": "Safe",
-        "icon": "$(shield)"
+        "command": "phpwn.markXSS",
+        "title": "XSS",
+        "icon": "$(code)"
       },
       {
-        "command": "phpwn.markInput",
-        "title": "Input",
+        "command": "phpwn.markSQL",
+        "title": "SQL",
+        "icon": "$(database)"
+      },
+      {
+        "command": "phpwn.markBoth",
+        "title": "Both",
         "icon": "$(warning)"
       },
       {
-        "command": "phpwn.markUnknown",
-        "title": "Unknown",
-        "icon": "$(question)"
+        "command": "phpwn.markNone",
+        "title": "None",
+        "icon": "$(shield)"
       },
       {
         "command": "phpwn.refreshReport",
@@ -78,19 +83,24 @@
     "menus": {
       "view/item/context": [
         {
-          "command": "phpwn.markSafe",
+          "command": "phpwn.markXSS",
           "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
           "group": "inline@1"
         },
         {
-          "command": "phpwn.markInput",
+          "command": "phpwn.markSQL",
           "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
           "group": "inline@2"
         },
         {
-          "command": "phpwn.markUnknown",
+          "command": "phpwn.markBoth",
           "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
           "group": "inline@3"
+        },
+        {
+          "command": "phpwn.markNone",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@4"
         }
       ],
       "view/title": [
