@@ -354,6 +354,30 @@ function cleanUpDefs(array $assignments, array $primitives)
     return $output;
 }
 
+function formatOutput(array $elements)
+{
+    $output = [];
+    foreach ($elements as $key => $val) {
+        $parts = explode(".", $key);
+        $current =&$output; // we need reference because we are modifying it !
+        $parent=null;
+        foreach($parts as $part){
+            if(!isset($current[$part])){
+                $current[$part]=[];
+                $current[$part]["children"]=[];
+            }
+            $parent=&$current[$part];
+            $current=&$current[$part]["children"];
+        }
+        $children=$parent["children"];
+        $parent=$val;
+        $parent["children"]=$children;
+        unset($current);
+        unset($parent);
+    }
+    return $output;
+}
+
 
 // Parsing command line args
 $listGlobs = false;
@@ -422,12 +446,18 @@ $allGlobals = array_unique(array_merge(
     array_keys($visitor->globalVars),
     array_keys($visitor2->globalVars)
 ));
+
+$jsonOutput=[];
+foreach($allGlobals as $global){
+    $jsonOutput[$global]=[];
+    $jsonOutput[$global]["name"]=$global;
+    $jsonOutput[$global]["taint"]=[];
+    $jsonOutput[$global]["taint"]["xss"]=null;
+    $jsonOutput[$global]["taint"]["sql"]=null;
+}
 // print them if user wants to
 if ($listGlobs) {
-    $output = array_map(function ($var) {
-        return ["name" => $var, "type" => "unknown"];
-    }, $allGlobals);
-    echo json_encode($output);
+    echo json_encode(formatOutput($jsonOutput));
     exit(0);
 }
 

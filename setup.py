@@ -196,7 +196,19 @@ def setup():
             return False
         try:
             f= open(varsFile,"w")
-            output = output[output.find('[{'):] # in case some error get's printed but the json still there
+            # in case some error get's printed but the json still there
+            obj_pos= output.find('{')
+            arr_pos= output.find('[')
+            if obj_pos== -1 and arr_pos== -1:
+                print(f"An error ocurred while writing output of preprocess.php to {varsFile}: no JSON found")
+                return False
+            if obj_pos== -1:
+                start= arr_pos
+            elif arr_pos== -1:
+                start= obj_pos
+            else:
+                start = min(obj_pos, arr_pos)
+            output = output[start:]
             json.dump(json.loads(output),f,indent=2)
             f.close()
         except Exception as e:
