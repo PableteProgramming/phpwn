@@ -12,6 +12,7 @@ $skipDirs = ['vendor', 'cron', '.phpwn', 'preprocess.php', 'psalm', 'phpstan'];
 $safePatterns = [];
 $inputPatterns = ['request', 'userdata', 'class', /* additional internal variable names redacted for public release */];
 $psalmPluginsDir = "psalm/plugins/globalVarTainter.php";
+$arrayDepth = 1;
 
 use PhpParser\NodeVisitorAbstract;
 use PhpParser\Node;
@@ -29,6 +30,7 @@ use PhpParser\ParserFactory;
 use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Scalar\InterpolatedString;
 use PhpParser\Node\Expr\BinaryOp\Concat;
+use PhpParser\Node\Expr\ArrayDimFetch;
 
 require_once('vendor/autoload.php');
 
@@ -36,22 +38,23 @@ require_once('vendor/autoload.php');
  * This function returns all the files with extension $extension 
  * in the directory $dir and subdirectories skipping entries containing $skipDirs
  */
-function getAllFiles(string $dir, array $skipDirs, string $extension): array{
-    $files=[];
-    $iterator= new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir,RecursiveDirectoryIterator::SKIP_DOTS));
+function getAllFiles(string $dir, array $skipDirs, string $extension): array
+{
+    $files = [];
+    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS));
 
-    foreach($iterator as $file){
-        if($file->getExtension() === $extension){
-            $path= $file->getPathname();
-            $ok=true;
-            foreach($skipDirs as $skip){
-                if(str_contains($path, DIRECTORY_SEPARATOR . $skip . DIRECTORY_SEPARATOR)){
-                    $ok=false;
+    foreach ($iterator as $file) {
+        if ($file->getExtension() === $extension) {
+            $path = $file->getPathname();
+            $ok = true;
+            foreach ($skipDirs as $skip) {
+                if (str_contains($path, DIRECTORY_SEPARATOR . $skip . DIRECTORY_SEPARATOR)) {
+                    $ok = false;
                     break;
                 }
             }
-            if($ok){
-                array_push($files,$path);
+            if ($ok) {
+                array_push($files, $path);
             }
         }
     }
@@ -66,13 +69,14 @@ function getAllFiles(string $dir, array $skipDirs, string $extension): array{
  *              → NodeVisitor::enterNode() (your code, called on each node)
  */
 
-class GlobalVarVisitor extends NodeVisitorAbstract{
-    public $globalVars=[];
-    public $assignments=[];
+class GlobalVarVisitor extends NodeVisitorAbstract
+{
+    public $globalVars = [];
+    public $assignments = [];
 
-    private $onlyList=false;
+    private $onlyList = false;
 
-    public $typeMap=[
+    public $typeMap = [
         Array_::class => "array",
         String_::class => "string",
         Int_::class => "int",
@@ -82,51 +86,166 @@ class GlobalVarVisitor extends NodeVisitorAbstract{
         Concat::class => "string"
     ];
 
-    public function __construct(bool $l =false){
-        $this->onlyList=$l;
+    public function __construct(bool $l = false)
+    {
+        $this->onlyList = $l;
     }
 
-    public function enterNode(Node $node){
-        if($node instanceof Global_){
+    public function enterNode(Node $node)
+    {
+        if ($node instanceof Global_) {
             // we have a global statement
-            foreach($node->vars as $var){
-                if($var instanceof Variable){
-                    $this->globalVars[$var->name]=true;
+            foreach ($node->vars as $var) {
+                if ($var instanceof Variable) {
+                    $this->globalVars[$var->name] = true;
                 }
             }
-        }
-        else if(!$this->onlyList && $node instanceof Assign){
-            $var= $node->var;
-            $expr= $node->expr;
-            
-            if($var instanceof Variable){
-                if($expr instanceof New_){
-                    if($expr->class instanceof Name){
-                        $exprType= implode('\\', $expr->class->getParts());
+        } else if (!$this->onlyList && $node instanceof Assign) {
+            $var = $node->var;
+            $expr = $node->expr;
+
+            if ($var instanceof Variable) {
+                if ($expr instanceof New_) {
+                    if ($expr->class instanceof Name) {
+                        $exprType = implode('\\', $expr->class->getParts());
+                    } else {
+                        $exprType = "mixed";
                     }
-                    else{
-                        $exprType="mixed";
-                    }
-                }
-                else{
-                    $exprType= $this->typeMap[get_class($expr)] ?? "mixed";
+                } else {
+                    $exprType = $this->typeMap[get_class($expr)] ?? "mixed";
                 }
                 // we use an array instead of variable, and we at the end clean it up to get the more precise type def
-                $this->assignments[$var->name][]=$exprType;
+                $this->assignments[$var->name][] = $exprType;
             }
         }
     }
 }
 
+class ArrayElemVisitor extends NodeVisitorAbstract
+{
+    public $globalVars = [];
+    public $existingVars = [];
+    public $assignments = [];
+
+    private $onlyList = false;
+
+    private int $depth;
+
+    public $typeMap = [
+        Array_::class => "array",
+        String_::class => "string",
+        Int_::class => "int",
+        Float_::class => "float",
+        ConstFetch::class => "bool",
+        InterpolatedString::class => "string",
+        Concat::class => "string"
+    ];
+
+    public function __construct($existingVars, bool $l = false, int $depth = 1)
+    {
+        $this->onlyList = $l;
+        $this->existingVars = $existingVars;
+        $this->depth = $depth;
+    }
+
+    private function resolveRoot(Node $node)
+    {
+        if ($node instanceof Variable && is_string($node->name)) {
+            return $node->name;
+        }
+        if ($node instanceof ArrayDimFetch) {
+            return $this->resolveRoot($node->var);
+        }
+        return null; // we can't go up again, but no name, exiting
+    }
+
+    private function resolveKeyAtDepth(Node $node, int $depth)
+    {
+        // we store all the objects in an array until we reach root, and then we can work with it.
+        $elems = [];
+        $current = $node;
+        while ($current instanceof ArrayDimFetch) {
+            array_push($elems, $current);
+            $current = $current->var;
+        }
+        $totalDepth = count($elems);
+
+        // check if it is exactly the depth we want if not, skip, probably a node already visited. etnernode visits Every node ! 
+        if ($totalDepth !== $depth) {
+            return [];
+        }
+        $currentDepth = $depth;
+        // we now have the depth we wanna extract, we go from there and store the names until we reach the depth wanted or a dynamic key
+        $output = [];
+        while ($currentDepth >= 1) {
+            $elem = $elems[$currentDepth - 1];
+            $value = $elem->dim;
+            if ($value instanceof String_) {
+                array_push($output, $value->value);
+            } else if ($value instanceof Int_) {
+                array_push($output, (string) $value->value);
+            } else {
+                return [];
+            }
+            $currentDepth--;
+        }
+        return $output;
+    }
+
+    public function enterNode(Node $node)
+    {
+        if ($node instanceof ArrayDimFetch) {
+            $parentName = $this->resolveRoot($node);
+            if ($parentName !== null && isset($this->existingVars[$parentName])) {
+                // we have a array access of a global variable to track.
+                $path = $this->resolveKeyAtDepth($node, $this->depth);
+                if (!empty($path)) {
+                    // we prepend the var name
+                    array_unshift($path, $parentName);
+                    $this->globalVars[implode('.', $path)] = $path;
+                }
+            }
+        } else if (!$this->onlyList && $node instanceof Assign) {
+            $var = $node->var;
+            $expr = $node->expr;
+
+            if ($var instanceof ArrayDimFetch) {
+                if ($expr instanceof New_) {
+                    if ($expr->class instanceof Name) {
+                        $exprType = implode('\\', $expr->class->getParts());
+                    } else {
+                        $exprType = "mixed";
+                    }
+                } else {
+                    $exprType = $this->typeMap[get_class($expr)] ?? "mixed";
+                }
+
+                $parentName = $this->resolveRoot($var);
+                if ($parentName !== null) {
+                    $path = $this->resolveKeyAtDepth($var, $this->depth);
+                    if (!empty($path)) {
+                        // we prepend the var name
+                        array_unshift($path, $parentName);
+                        // we use an array instead of variable, and we at the end clean it up to get the more precise type def
+                        $this->assignments[implode('.', $path)][] = $exprType;
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 /**
  * This function checks if the variable looks like a user input depending on the lists above
  */
-function isInput(string $name, array $inputs, array $safe): bool{
+function isInput(string $name, array $inputs, array $safe): bool
+{
     // we don't do regex anymore because we pass the exact variable names !
-    if(in_array($name, $safe)){
+    if (in_array($name, $safe)) {
         return false;
     }
-    if(in_array($name, $inputs)){
+    if (in_array($name, $inputs)) {
         return true;
     }
     return true;
@@ -135,100 +254,101 @@ function isInput(string $name, array $inputs, array $safe): bool{
 /**
  * This class updates the psalm.xml file depending on the given global variables (safe variables, not tainted)
  */
-class PsalmXMLConfig{
+class PsalmXMLConfig
+{
     private $filePath;
 
-    public function __construct(string $path){
-        $this->filePath=$path;
+    public function __construct(string $path)
+    {
+        $this->filePath = $path;
     }
 
-    public function update(array $globalVars):bool{
-        try{    
-            $xml= new DOMDocument("1.0");
-            $xml->preserveWhiteSpace =false;
-            $xml->formatOutput= true;
-            if($xml->load($this->filePath)){
-                $globalsTag= $xml->getElementsByTagName("globals")->item(0);
-                if($globalsTag===null){
+    public function update(array $globalVars): bool
+    {
+        try {
+            $xml = new DOMDocument("1.0");
+            $xml->preserveWhiteSpace = false;
+            $xml->formatOutput = true;
+            if ($xml->load($this->filePath)) {
+                $globalsTag = $xml->getElementsByTagName("globals")->item(0);
+                if ($globalsTag === null) {
                     // not there yet, we create it
-                    $globalsTag= $xml->createElement("globals");
+                    $globalsTag = $xml->createElement("globals");
                     $xml->documentElement->appendChild($globalsTag);
-                }
-                else{
+                } else {
                     //already there, so we clean it
-                    while($globalsTag->firstChild){
+                    while ($globalsTag->firstChild) {
                         $globalsTag->removeChild($globalsTag->firstChild);
                     }
                 }
 
-                foreach($globalVars as $var => $type){
+                foreach ($globalVars as $var => $type) {
                     // we add the variable and it's type to teh psalm.xml
-                    $varNode= $xml->createElement("var");
-                    $varNode->setAttribute("name",$var);
-                    $varNode->setAttribute("type",$type);
+                    $varNode = $xml->createElement("var");
+                    $varNode->setAttribute("name", $var);
+                    $varNode->setAttribute("type", $type);
                     $globalsTag->appendChild($varNode);
                 }
 
-                if(!$xml->save($this->filePath)){
-                    echo "[!] Could not save ".$this->filePath."\n";
+                if (!$xml->save($this->filePath)) {
+                    echo "[!] Could not save " . $this->filePath . "\n";
                     return false;
-                };
+                }
+                ;
                 return true;
 
-            }else{
-                echo "[!] Error loading xml file ".$this->filePath."\n";
+            } else {
+                echo "[!] Error loading xml file " . $this->filePath . "\n";
                 return false;
             }
-        }
-        catch (Exception $e) {
-            echo "[!] XML error: ".$e->getMessage()."\n";
+        } catch (Exception $e) {
+            echo "[!] XML error: " . $e->getMessage() . "\n";
             return false;
         }
     }
 }
 
-function modifyPlugin(string $filename, array $taintedGlobals):bool{
-    $taintedList= '"' . implode('", "',$taintedGlobals) . '"';
-    $pluginCode=file_get_contents($filename);
-    if($pluginCode!==false){
+function modifyPlugin(string $filename, array $taintedGlobals): bool
+{
+    $taintedList = '"' . implode('", "', $taintedGlobals) . '"';
+    $pluginCode = file_get_contents($filename);
+    if ($pluginCode !== false) {
         $pluginCode = preg_replace(
             '/private static \$globalstoTaint=.*?;/s',
             'private static $globalstoTaint= [' . $taintedList . '];',
             $pluginCode
         );
 
-        if($pluginCode===null){
+        if ($pluginCode === null) {
             echo "[!] An error ocurred while trying to replace the file content\n";
             return false;
-        }
-        else{
-            if(file_put_contents($filename,$pluginCode)===false){
-                echo "[!] Unable to write plugin file ". $filename . "\n";
+        } else {
+            if (file_put_contents($filename, $pluginCode) === false) {
+                echo "[!] Unable to write plugin file " . $filename . "\n";
                 return false;
             }
         }
         return true;
-    }
-    else{
-        echo "[!] Unable to read plugin file ". $filename . "\n";
+    } else {
+        echo "[!] Unable to read plugin file " . $filename . "\n";
         return false;
     }
 }
 
-function cleanUpDefs(array $assignments, array $primitives){
-    $output=[];
-    foreach($assignments as $var => $types){
-        foreach($types as $type){
-            if(!in_array($type,$primitives) && $type!=="mixed"){
-                $output[$var]=$type;
+function cleanUpDefs(array $assignments, array $primitives)
+{
+    $output = [];
+    foreach ($assignments as $var => $types) {
+        foreach ($types as $type) {
+            if (!in_array($type, $primitives) && $type !== "mixed") {
+                $output[$var] = $type;
                 break;
-            }
-            else if(in_array($type,$primitives) && !isset($output[$var])){
-                $output[$var]=$type;
+            } else if (in_array($type, $primitives) && !isset($output[$var])) {
+                $output[$var] = $type;
             }
         }
-        if(!isset($output[$var])){
-            $output[$var]="mixed";
+        if (!isset($output[$var])) {
+            $output[$var] = "mixed";
         }
     }
     return $output;
@@ -236,80 +356,112 @@ function cleanUpDefs(array $assignments, array $primitives){
 
 
 // Parsing command line args
-$listGlobs=false;
-if(count($argv)>1){
-    if($argv[1]==="--list"){
-        $listGlobs=true;
+$listGlobs = false;
+if (count($argv) > 1) {
+    if ($argv[1] === "--list") {
+        $listGlobs = true;
     }
 }
 
 // Creating needed objects for parsing
-$parser   = (new ParserFactory())->createForNewestSupportedVersion();
+$parser = (new ParserFactory())->createForNewestSupportedVersion();
 $traverser = new NodeTraverser();
-$visitor  = new GlobalVarVisitor($listGlobs);
+// this pass 1 needs to be done before pass two for variable's array
+$visitor = new GlobalVarVisitor($listGlobs);
 $traverser->addVisitor($visitor);
 
-$files=getAllFiles(".",$skipDirs,"php");
+$files = getAllFiles(".", $skipDirs, "php");
 
-// we parse each file
-foreach($files as $file){
-    $code= file_get_contents($file);
-    if($code===false){
-        echo "[!] An error ocurred while trying to read ".$file."\n";
+// we parse each file - pass 1
+foreach ($files as $file) {
+    $code = file_get_contents($file);
+    if ($code === false) {
+        echo "[!] An error ocurred while trying to read " . $file . "\n";
         // We skip the file, don't error
         continue;
     }
-    try{
-        $ast= $parser->parse($code);
-        if($ast) {
+    try {
+        $ast = $parser->parse($code);
+        if ($ast) {
             $traverser->traverse($ast);
         } //otherwise, we skip the file
-    }catch(Exception $e){
-        echo "[!] Parse error in $file: " .  $e->getMessage(). "\n";
+    } catch (Exception $e) {
+        echo "[!] Parse error in $file: " . $e->getMessage() . "\n";
         //we skip it, we don't error and break the whole execution !
     }
 }
 
-// we now have all the globals var and all the variable assignments
-$globals= array_keys($visitor->globalVars);
+// this is pass 2 - uses global vars from pass 1
+$visitor2 = new ArrayElemVisitor($visitor->globalVars, $listGlobs, $arrayDepth);
+$traverser2 = new NodeTraverser();
+$traverser2->addVisitor($visitor2);
 
+
+// we parse each file - pass 2
+foreach ($files as $file) {
+    $code = file_get_contents($file);
+    if ($code === false) {
+        echo "[!] An error ocurred while trying to read " . $file . "\n";
+        // We skip the file, don't error
+        continue;
+    }
+    try {
+        $ast = $parser->parse($code);
+        if ($ast) {
+            $traverser2->traverse($ast);
+        } //otherwise, we skip the file
+    } catch (Exception $e) {
+        echo "[!] Parse error in $file: " . $e->getMessage() . "\n";
+        //we skip it, we don't error and break the whole execution !
+    }
+}
+
+
+// Correct
+$allGlobals = array_unique(array_merge(
+    array_keys($visitor->globalVars),
+    array_keys($visitor2->globalVars)
+));
 // print them if user wants to
-if($listGlobs){
-    $output = array_map(function($var) {
+if ($listGlobs) {
+    $output = array_map(function ($var) {
         return ["name" => $var, "type" => "unknown"];
-    }, $globals);
+    }, $allGlobals);
     echo json_encode($output);
     exit(0);
 }
 
-$assignments= $visitor->assignments;
-$assignments=cleanUpDefs($assignments,array_values($visitor->typeMap));
+// we gotta fix this too, but for now let's see if --list works
+
+$assignments1 = cleanUpDefs($visitor->assignments, array_values($visitor->typeMap));
+$assignments2 = cleanUpDefs($visitor2->assignments, array_values($visitor2->typeMap));
+$allTypes = array_merge($assignments1, $assignments2);
+
 
 // we now combine assigments and globals to get the type of each global variable
-$globalsTypes=[];
-foreach($globals as $globalVar){
-    $globalsTypes[$globalVar]=$assignments[$globalVar] ?? "mixed";
+$globalsTypes = [];
+foreach ($allGlobals as $globalVar) {
+    $globalsTypes[$globalVar] = $allTypes[$globalVar] ?? "mixed";
 }
 
 // We now extract the ones that are user input
-$inputs=[];
-$safeGlobs=[];
-foreach($globalsTypes as $var => $type){
-    if(isInput($var,$inputPatterns,$safePatterns)){
-        array_push($inputs,$var);
-    }
-    else{
-        $safeGlobs[$var]=$type;
+$inputs = [];
+$safeGlobs = [];
+foreach ($globalsTypes as $var => $type) {
+    if (isInput($var, $inputPatterns, $safePatterns)) {
+        array_push($inputs, $var);
+    } else {
+        $safeGlobs[$var] = $type;
     }
 }
 
-$psalmParser= new PsalmXMLConfig("psalm.xml");
-if($psalmParser->update($safeGlobs)===false){
+$psalmParser = new PsalmXMLConfig("psalm.xml");
+if ($psalmParser->update($safeGlobs) === false) {
     echo "An error ocurred while trying to update psalm.xml\n";
     exit(1);
 }
 
-if(modifyPlugin($psalmPluginsDir,$inputs)===false){
+if (modifyPlugin($psalmPluginsDir, $inputs) === false) {
     echo "An error ocurred while trying to update the plugin code.\n";
     exit(1);
 }
