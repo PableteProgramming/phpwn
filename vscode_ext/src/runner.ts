@@ -19,14 +19,17 @@ function getVenvPython(workspaceRoot: string): string {
     return path.join(base, '.venv', 'bin', 'python3');
 }
 
-function runCommand(cmd: string, cwd: string): Promise<number> {
+function runCommand(cmd: string, cwd: string): Promise<{ code: number, stdout: string, stderr: string }> {
     return new Promise((resolve, reject) => {
         const proc = cp.exec(cmd, { cwd }, (error, stdout, stderr) => {
             if (error && error.code === undefined) {
-                // Truly failed to spawn (e.g. command not found)
                 reject(new Error(`${stderr}\n${stdout}`));
             } else {
-                resolve(error?.code ?? 0);
+                resolve({
+                    code: error?.code ?? 0,
+                    stdout,
+                    stderr
+                });
             }
         });
     });
@@ -114,18 +117,19 @@ export async function runPHPwn(context: vscode.ExtensionContext, workspaceRoot: 
         cancellable: false
     }, async (progress) => {
         progress.report({ message: 'Running analysis...' });
-        const code = await runCommand(`"${python}" PHPwn.py ${path.relative(extractDir, workspaceRoot)}`, extractDir);
-        if (code === 0) {
+        
+        const r = await runCommand(`"${python}" PHPwn.py ${path.relative(extractDir, workspaceRoot)}`, extractDir);
+        if (r.code === 0) {
             vscode.window.showInformationMessage('PHPwn: Analysis complete!');
             result='done';
         }
-        else if (code === 2) {
+        else if (r.code === 2) {
             // Code 2 means we need user input on variable categorization
             vscode.window.showInformationMessage('PHPwn: Variables analysis complete!');
             result='vars';
         }
         else {
-            throw new Error(`PHPwn analysis failed with exit code ${code}.`);
+            throw new Error(`PHPwn analysis failed with exit code ${r.code}: ${r.stderr || r.stdout}`);
         }
     });
     return result!;
