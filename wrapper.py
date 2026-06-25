@@ -41,25 +41,49 @@ def runCommandOrFail(command,wd,allowCodes=[0],output=False):
             return False,""
         else:
             return False
-
-def buildPatternsList(varsFile):
+    
+def updateChildren(content,xss,sql): # because content is a list, it is passed as reference ! xD
+    content["taint"]["xss"]=xss
+    content["taint"]["sql"]=sql
+    if not (xss is None and sql is None):
+        if isinstance(content["children"],dict):
+            for child in content["children"].values():
+                updateChildren(child,xss,sql)
+            
+def visitNode(node,safeL,xssL,sqlL):
+    if node["taint"]["xss"] is False and node["taint"]["sql"] is False:
+        safeL.append(node["name"])
+    if node["taint"]["xss"] is True:
+        xssL.append(node["name"])
+    if node["taint"]["sql"] is True:
+        sqlL.append(node["name"])
+    # we now visit the children
+    if isinstance(node["children"],dict):
+        for child in node["children"].values():
+            safeL,xssL,sqlL= visitNode(child,safeL,xssL,sqlL)
+    return safeL,xssL,sqlL
+    
+def buildVarsList(varsFile):
     try:
-        safePatterns=[]
-        inputPatterns=[]
+        safeVars=[]
+        xssVars=[]
+        sqlVars=[]
         f= open(varsFile,"r")
         content=json.load(f)
-        for var in content:
-            if var["type"]=="safe":
-                safePatterns.append(var["name"])
-            elif var["type"]=="unknown" or var["type"]=="input":
-                inputPatterns.append(var["name"])
-            else:
-                print(f"[!] You have a variable that has a type other than (safe, input, unknown): {var['type']}")
-                return False,[],[]
-        return True,safePatterns,inputPatterns
+        f.close()
+        for var in content.values():
+            updateChildren(var,var["taint"]["xss"],var["taint"]["sql"])
+        # Now we updated the children ! We may write this back to the file so that the user sees what happened
+        f=open(varsFile,"w")
+        json.dump(content,f)
+        f.close()
+        # Now, we can build the arrays needed !
+        for var in content.values():
+            safeVars,xssVars,sqlVars= visitNode(var,safeVars,xssVars,sqlVars)                
+        return True,safeVars,xssVars,sqlVars
     except Exception as e:
         print(f"[!] An error ocurred while trying to parse the vars file {varsFile}: {e}")
-        return False,[],[]
+        return False,[],[],[]
 
 def main():
     srcDir,outDir,excludes,varsFile,outputJson,outputCsv,directServing,htaccessPath,accessibleFiles= parseArgs()
@@ -67,17 +91,17 @@ def main():
     if not os.path.exists(varsFile):
         # if the file is not existing yet, we need to create it, and let the user choose.
         print("[+] Running variables setup...")
-        if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir,"--excludes",*excludes,"--vars","--vars-file",varsFile],os.getcwd()):
+        if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir,]+(["--excludes",*excludes] if len(excludes)>0 else [])+["--vars","--vars-file",varsFile],os.getcwd()):
             print("[!] An error ocurred during setup. Exiting...")
             return False
         return None # not true, because variables config
 
-    ok,safePatterns,inputPatterns= buildPatternsList(varsFile)
+    ok,safeVars,xssVars,SqlVars= buildVarsList(varsFile)
     if not ok:
         return False
     
     print("[+] Setting up PHPwn...")
-    if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir,"--excludes",*excludes,"--safe-patterns",*safePatterns,"--input-patterns",*inputPatterns]+(["--accessible-files"] if accessibleFiles else []),os.getcwd()):
+    if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir]+(["--excludes",*excludes] if len(excludes)>0 else [])+(["--safe-patterns",*safeVars] if len(safeVars)>0 else [])+(["--xss-patterns",*xssVars] if len(xssVars)>0 else [])+(["--sql-patterns",*SqlVars] if len(SqlVars)>0 else [])+(["--accessible-files"] if accessibleFiles else []),os.getcwd()):
         print("[!] An error ocurred during setup. Exiting...")
         return False
     print("[+] Starting analysis. This may take a while...")

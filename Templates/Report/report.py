@@ -190,18 +190,18 @@ class Formatter:
                 f= io.StringIO()
             try:
                 writer = csv.writer(f)
-                
-                # we calculate the number of columns necessary for the traces
-                maxTraces= max(len(entry["trace"]) for entry in input)
-                headers= ["type", "file", "line", "snippet", "source", "variable"] + [f"trace_{i+1}" for i in range(maxTraces)]
-                # we write the header
-                writer.writerow(headers)
-                
-                # we now write the errors
-                for error in input:
-                    traces = [f"{trace['label']} @ {trace['file']}:{trace['line']}" for trace in error["trace"]]+ [""]*(maxTraces-len(error["trace"]))
-                    row= [error["type"], error["file"], error["line"], error["snippet"], error["source"], error["variable"],*traces]
-                    writer.writerow(row)
+                if len(input)>0:
+                    # we calculate the number of columns necessary for the traces
+                    maxTraces= max(len(entry["trace"]) for entry in input)
+                    headers= ["type", "file", "line", "snippet", "source", "variable"] + [f"trace_{i+1}" for i in range(maxTraces)]
+                    # we write the header
+                    writer.writerow(headers)
+                    
+                    # we now write the errors
+                    for error in input:
+                        traces = [f"{trace['label']} @ {trace['file']}:{trace['line']}" for trace in error["trace"]]+ [""]*(maxTraces-len(error["trace"]))
+                        row= [error["type"], error["file"], error["line"], error["snippet"], error["source"], error["variable"],*traces]
+                        writer.writerow(row)
             except Exception as e:
                 if file:
                     return False,f"An error ocurred while opening/writing to {file}: {e}"

@@ -10,7 +10,8 @@
 
 $skipDirs = ['vendor', 'cron', '.phpwn', 'preprocess.php', 'psalm', 'phpstan'];
 $safePatterns = [];
-$inputPatterns = ['request', 'userdata', 'class', /* additional internal variable names redacted for public release */];
+$xssPatterns = [];
+$sqlPatterns = [];
 $psalmPluginsDir = "psalm/plugins/globalVarTainter.php";
 $arrayDepth = 1;
 
@@ -235,22 +236,6 @@ class ArrayElemVisitor extends NodeVisitorAbstract
     }
 }
 
-
-/**
- * This function checks if the variable looks like a user input depending on the lists above
- */
-function isInput(string $name, array $inputs, array $safe): bool
-{
-    // we don't do regex anymore because we pass the exact variable names !
-    if (in_array($name, $safe)) {
-        return false;
-    }
-    if (in_array($name, $inputs)) {
-        return true;
-    }
-    return true;
-}
-
 /**
  * This class updates the psalm.xml file depending on the given global variables (safe variables, not tainted)
  */
@@ -261,6 +246,16 @@ class PsalmXMLConfig
     public function __construct(string $path)
     {
         $this->filePath = $path;
+    }
+
+    private function dotPathToPsalmVar(string $dotPath): string
+    {
+        $parts = explode('.', $dotPath);
+        $name = array_shift($parts);
+        foreach ($parts as $part) {
+            $name .= "['" . $part . "']";
+        }
+        return $name;
     }
 
     public function update(array $globalVars): bool
@@ -285,7 +280,7 @@ class PsalmXMLConfig
                 foreach ($globalVars as $var => $type) {
                     // we add the variable and it's type to teh psalm.xml
                     $varNode = $xml->createElement("var");
-                    $varNode->setAttribute("name", $var);
+                    $varNode->setAttribute("name", $this->dotPathToPsalmVar($var));
                     $varNode->setAttribute("type", $type);
                     $globalsTag->appendChild($varNode);
                 }
@@ -308,14 +303,15 @@ class PsalmXMLConfig
     }
 }
 
-function modifyPlugin(string $filename, array $taintedGlobals): bool
+function modifyPlugin(string $filename, array $taintedGlobalsXss, array $taintedGlobalsSql): bool
 {
-    $taintedList = '"' . implode('", "', $taintedGlobals) . '"';
+    $taintedListXss = '"' . implode('", "', $taintedGlobalsXss) . '"';
+    $taintedListSql = '"' . implode('", "', $taintedGlobalsSql) . '"';
     $pluginCode = file_get_contents($filename);
     if ($pluginCode !== false) {
         $pluginCode = preg_replace(
-            '/private static \$globalstoTaint=.*?;/s',
-            'private static $globalstoTaint= [' . $taintedList . '];',
+            '/private static \$globalsToTaintXss\s*=.*?;/s',
+            'private static $globalsToTaintXss= [' . $taintedListXss . '];',
             $pluginCode
         );
 
@@ -323,9 +319,19 @@ function modifyPlugin(string $filename, array $taintedGlobals): bool
             echo "[!] An error ocurred while trying to replace the file content\n";
             return false;
         } else {
-            if (file_put_contents($filename, $pluginCode) === false) {
-                echo "[!] Unable to write plugin file " . $filename . "\n";
+            $pluginCode = preg_replace(
+                '/private static \$globalsToTaintSql\s*=.*?;/s',
+                'private static $globalsToTaintSql= [' . $taintedListSql . '];',
+                $pluginCode
+            );
+            if ($pluginCode === null) {
+                echo "[!] An error ocurred while trying to replace the file content\n";
                 return false;
+            } else {
+                if (file_put_contents($filename, $pluginCode) === false) {
+                    echo "[!] Unable to write plugin file " . $filename . "\n";
+                    return false;
+                }
             }
         }
         return true;
@@ -359,19 +365,19 @@ function formatOutput(array $elements)
     $output = [];
     foreach ($elements as $key => $val) {
         $parts = explode(".", $key);
-        $current =&$output; // we need reference because we are modifying it !
-        $parent=null;
-        foreach($parts as $part){
-            if(!isset($current[$part])){
-                $current[$part]=[];
-                $current[$part]["children"]=[];
+        $current =& $output; // we need reference because we are modifying it !
+        $parent = null;
+        foreach ($parts as $part) {
+            if (!isset($current[$part])) {
+                $current[$part] = [];
+                $current[$part]["children"] = [];
             }
-            $parent=&$current[$part];
-            $current=&$current[$part]["children"];
+            $parent =& $current[$part];
+            $current =& $current[$part]["children"];
         }
-        $children=$parent["children"];
-        $parent=$val;
-        $parent["children"]=$children;
+        $children = $parent["children"];
+        $parent = $val;
+        $parent["children"] = $children;
         unset($current);
         unset($parent);
     }
@@ -447,13 +453,13 @@ $allGlobals = array_unique(array_merge(
     array_keys($visitor2->globalVars)
 ));
 
-$jsonOutput=[];
-foreach($allGlobals as $global){
-    $jsonOutput[$global]=[];
-    $jsonOutput[$global]["name"]=$global;
-    $jsonOutput[$global]["taint"]=[];
-    $jsonOutput[$global]["taint"]["xss"]=null;
-    $jsonOutput[$global]["taint"]["sql"]=null;
+$jsonOutput = [];
+foreach ($allGlobals as $global) {
+    $jsonOutput[$global] = [];
+    $jsonOutput[$global]["name"] = $global;
+    $jsonOutput[$global]["taint"] = [];
+    $jsonOutput[$global]["taint"]["xss"] = null;
+    $jsonOutput[$global]["taint"]["sql"] = null;
 }
 // print them if user wants to
 if ($listGlobs) {
@@ -475,12 +481,9 @@ foreach ($allGlobals as $globalVar) {
 }
 
 // We now extract the ones that are user input
-$inputs = [];
 $safeGlobs = [];
 foreach ($globalsTypes as $var => $type) {
-    if (isInput($var, $inputPatterns, $safePatterns)) {
-        array_push($inputs, $var);
-    } else {
+    if (in_array($var, $safePatterns)) {
         $safeGlobs[$var] = $type;
     }
 }
@@ -491,7 +494,7 @@ if ($psalmParser->update($safeGlobs) === false) {
     exit(1);
 }
 
-if (modifyPlugin($psalmPluginsDir, $inputs) === false) {
+if (modifyPlugin($psalmPluginsDir, $xssPatterns,$sqlPatterns) === false) {
     echo "An error ocurred while trying to update the plugin code.\n";
     exit(1);
 }

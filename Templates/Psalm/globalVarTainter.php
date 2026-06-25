@@ -38,6 +38,12 @@ use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\PluginRegistrationSocket;
 use PhpParser\Node\Expr\Variable;
 use Psalm\Type\TaintKind;
+use PhpParser\Node;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\ArrayDimFetch;
+use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Scalar\Int_;
+
 
 class globalVarTainter implements PluginEntryPointInterface, AddTaintsInterface
 {
@@ -45,11 +51,95 @@ class globalVarTainter implements PluginEntryPointInterface, AddTaintsInterface
      * List of global variable names (without $) to treat as taint sources.
      * Populated automatically by the PHPwn preprocessor — do not edit manually.
      */
-    private static $globalstoTaint= [];
+    private static $globalsToTaintXss= [];
+    private static $globalsToTaintSql= [];
 
     public function __invoke(PluginRegistrationSocket $registration, SimpleXMLElement|null $config = null): void
     {
         $registration->registerHooksFromClass(static::class);
+    }
+
+    private static function resolveRoot(Node $node)
+    {
+        if ($node instanceof Variable && is_string($node->name)) {
+            return $node->name;
+        }
+        if ($node instanceof ArrayDimFetch) {
+            return self::resolveRoot($node->var);
+        }
+        return null; // we can't go up again, but no name, exiting
+    }
+
+    private static function resolveKeys(Node $node)
+    {
+        // we store all the objects in an array until we reach root, and then we can work with it.
+        $names = [];
+        $current = $node;
+        while ($current instanceof ArrayDimFetch) {
+            $v = $current->dim;
+            if ($v instanceof String_) {
+                array_unshift($names, $v->value);
+            } else if ($v instanceof Int_) {
+                array_unshift($names, (string) $v->value);
+            } else {
+                return "";
+            }
+            $current = $current->var;
+        }
+        return implode(".", $names);
+    }
+
+
+    private static function extractFirstNKeys(string $input,int $n){
+        $parts= explode(".",$input);
+        if ($n>count($parts)){
+            return $input;
+        }
+        $parts= array_splice($parts,0,$n);
+        return implode(".",$parts);
+    }
+
+    private static function findTaint($expr)
+    {
+        // Handle ArrayItem => extract the value
+        if ($expr instanceof ArrayItem) {
+            $expr = $expr->value;
+        }
+
+        $type = [];
+        // This is the basic, in case we are talking about a variable.
+        if ($expr instanceof Variable && in_array($expr->name, self::$globalsToTaintXss, true)) {
+            array_push($type, TaintKind::INPUT_HTML);
+        }
+        if ($expr instanceof Variable && in_array($expr->name, self::$globalsToTaintSql, true)) {
+            array_push($type, TaintKind::INPUT_SQL);
+        }
+        if ($expr instanceof ArrayDimFetch) {
+            $rootName = self::resolveRoot($expr);
+            if ($rootName === null) {
+                return [];
+            }
+            $keys = self::resolveKeys($expr);
+            if ($keys === "") {
+                return [];
+            }
+            $fullName = $rootName . "." . $keys;
+            foreach(self::$globalsToTaintXss as $xssGlobal){
+                $p= self::extractFirstNKeys($fullName,count(explode(".",$xssGlobal)));
+                if($p===$xssGlobal){
+                    array_push($type, TaintKind::INPUT_HTML);
+                    break;
+                }
+            }
+            foreach(self::$globalsToTaintSql as $sqlGlobal){
+                $p= self::extractFirstNKeys($fullName,count(explode(".",$sqlGlobal)));
+                if($p===$sqlGlobal){
+                    array_push($type, TaintKind::INPUT_SQL);
+                    break;
+                }
+            }
+        }
+        return $type;
     }
 
     /**
@@ -67,20 +157,13 @@ class globalVarTainter implements PluginEntryPointInterface, AddTaintsInterface
      */
     public static function addTaints(AddRemoveTaintsEvent $event): array
     {
-        $expr = $event->getExpr();
-
-        if ($expr instanceof Variable && in_array($expr->name, self::$globalstoTaint, true)) {
-            return [
-                TaintKind::INPUT_SQL,
-                TaintKind::INPUT_HTML,
-                TaintKind::INPUT_SHELL,
-                TaintKind::INPUT_SSRF,
-                TaintKind::INPUT_FILE,
-                TaintKind::INPUT_COOKIE,
-                TaintKind::INPUT_HEADER,
-            ];
+        if(count(self::$globalsToTaintXss)===1 && self::$globalsToTaintXss[0]===""){
+            self::$globalsToTaintXss=[];
         }
-
-        return [];
+        if(count(self::$globalsToTaintSql)===1 && self::$globalsToTaintSql[0]===""){
+            self::$globalsToTaintSql=[];
+        }
+        $expr = $event->getExpr();
+        return self::findTaint($expr);
     }
 }

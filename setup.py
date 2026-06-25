@@ -71,12 +71,13 @@ def parseArgs():
     # Optional flags
     parser.add_argument("--excludes", "-e", nargs="+", default=[], help="Directories to skip.")
     parser.add_argument("--safe-patterns", "-s", nargs="+", default=[], help="Patterns for safe variables.")
-    parser.add_argument("--input-patterns", "-i", nargs="+", default=[], help="Patterns for input variables.")
+    parser.add_argument("--xss-patterns", "-x", nargs="+", default=[], help="Patterns for xss variables.")
+    parser.add_argument("--sql-patterns", "-l", nargs="+", default=[], help="Patterns for sql variables.")
     parser.add_argument("--vars","-v",action="store_true",help="Pass this variable to get a list of global variables.")
     parser.add_argument("--vars-file","-f",type=str,default="phpwn.vars.json", help="The path of the file with the variables.")
     parser.add_argument("--accessible-files","-a",action="store_true",help="Pass this if you want PHPwn to check for accessbile files based on an .htaccess routing file.")
     args= parser.parse_args()
-    return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.input_patterns,args.vars,args.vars_file,args.accessible_files
+    return args.src_dir,args.out_dir,args.excludes,args.safe_patterns,args.xss_patterns,args.sql_patterns,args.vars,args.vars_file,args.accessible_files
 
 def buildPhpArray(elements):
     return ", ".join(f"'{elem}'" for elem in elements)
@@ -151,7 +152,7 @@ def updateComposer(filename,namespace,dir):
         return False
         
 def setup():
-    srcDir, outDir, excludes, safePatterns, inputPatterns,vars,varsFile, accessibleFiles = parseArgs()
+    srcDir, outDir, excludes, safePatterns, xssPatterns,sqlPatterns, vars,varsFile, accessibleFiles = parseArgs()
     
     excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR])
     currentDir=os.path.dirname(os.path.abspath(__file__))
@@ -268,10 +269,16 @@ def setup():
         print(f"[!] An error occurred while trying to append safe patterns to preprocess.php")
         return False
     
-    if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"inputPatterns",f"[{buildPhpArray(inputPatterns)}];"):
+    if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"xssPatterns",f"[{buildPhpArray(xssPatterns)}];"):
         print(f"[+] Input patterns where appended to preprocess.php")
     else:
-        print(f"[!] An error occurred while trying to append safe patterns to preprocess.php")
+        print(f"[!] An error occurred while trying to append xss patterns to preprocess.php")
+        return False
+    
+    if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"sqlPatterns",f"[{buildPhpArray(sqlPatterns)}];"):
+        print(f"[+] Input patterns where appended to preprocess.php")
+    else:
+        print(f"[!] An error occurred while trying to append sql patterns to preprocess.php")
         return False
     
     if appendToPhpFile(os.path.join(srcPath,"preprocess.php"),"psalmPluginsDir",f'"{os.path.join(PSALM_DIR,PSALM_PLUGIN_DIR,"globalVarTainter.php")}";'):
