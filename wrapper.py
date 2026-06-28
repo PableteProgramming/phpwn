@@ -71,6 +71,10 @@ def buildVarsList(varsFile):
         f= open(varsFile,"r")
         content=json.load(f)
         f.close()
+        if not  isinstance(content,dict):
+            if isinstance(content,list) and len(content)<=0:
+                return True,[],[],[]
+            return False,[],[],[]
         for var in content.values():
             updateChildren(var,var["taint"]["xss"],var["taint"]["sql"])
         # Now we updated the children ! We may write this back to the file so that the user sees what happened

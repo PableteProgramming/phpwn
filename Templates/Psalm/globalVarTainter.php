@@ -157,12 +157,6 @@ class globalVarTainter implements PluginEntryPointInterface, AddTaintsInterface
      */
     public static function addTaints(AddRemoveTaintsEvent $event): array
     {
-        if(count(self::$globalsToTaintXss)===1 && self::$globalsToTaintXss[0]===""){
-            self::$globalsToTaintXss=[];
-        }
-        if(count(self::$globalsToTaintSql)===1 && self::$globalsToTaintSql[0]===""){
-            self::$globalsToTaintSql=[];
-        }
         $expr = $event->getExpr();
         return self::findTaint($expr);
     }

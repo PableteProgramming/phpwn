@@ -260,6 +260,9 @@ class PsalmXMLConfig
 
     public function update(array $globalVars): bool
     {
+        if(count($globalVars)<=0){
+            return true;
+        }
         try {
             $xml = new DOMDocument("1.0");
             $xml->preserveWhiteSpace = false;
@@ -305,8 +308,14 @@ class PsalmXMLConfig
 
 function modifyPlugin(string $filename, array $taintedGlobalsXss, array $taintedGlobalsSql): bool
 {
-    $taintedListXss = '"' . implode('", "', $taintedGlobalsXss) . '"';
-    $taintedListSql = '"' . implode('", "', $taintedGlobalsSql) . '"';
+    $taintedListXss = "";
+    $taintedListSql = "";
+    if(count($taintedGlobalsXss)>0){
+        $taintedListXss = '"' . implode('", "', $taintedGlobalsXss) . '"';
+    }
+    if(count($taintedGlobalsSql)>0){
+        $taintedListSql = '"' . implode('", "', $taintedGlobalsSql) . '"';
+    }
     $pluginCode = file_get_contents($filename);
     if ($pluginCode !== false) {
         $pluginCode = preg_replace(

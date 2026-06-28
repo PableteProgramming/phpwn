@@ -44,6 +44,8 @@ PHPSTAN_DIR="phpstan"
 PHPSTAN_RULES_DIR="rules"
 
 def addXml(filename,inTag,tag,values):
+    if len(values)<=0:
+        return True
     try:
         tree= etree.parse(filename)
     except OSError:
