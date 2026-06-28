@@ -66,6 +66,11 @@
         "icon": "$(shield)"
       },
       {
+        "command": "phpwn.markUnclassified",
+        "title": "Unclassified",
+        "icon": "$(question)"
+      },
+      {
         "command": "phpwn.refreshReport",
         "title": "Refresh",
         "icon": "$(refresh)"
@@ -99,6 +104,11 @@
         },
         {
           "command": "phpwn.markNone",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@4"
+        },
+        {
+          "command": "phpwn.markUnclassified",
           "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
           "group": "inline@4"
         }
