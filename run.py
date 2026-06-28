@@ -116,6 +116,9 @@ def run():
     print("[+] Running report.py. This may take a while...")
     if not runCommandOrFail([sys.executable, "report.py", srcDir,PSALM_OUTPUT,PHPSTAN_OUTPUT,CODEBASECHECK_OUTPUT,"--output-json",outputJson,"--output-csv",outputCsv]+(["--accessible-files"] if accessibleFiles else []),outDir):
         return False
+    print("[+] Running cleanReport.py. This may take a while...")
+    if not runCommandOrFail([sys.executable, "cleanReport.py", outputJson],outDir):
+        return False
     
     try:
         if accessibleFiles:
@@ -123,6 +126,7 @@ def run():
         os.remove(os.path.join(outDir,PSALM_OUTPUT))
         os.remove(os.path.join(outDir,PHPSTAN_OUTPUT))
         os.remove(os.path.join(outDir,"report.py"))
+        os.remove(os.path.join(outDir,"cleanReport.py"))
     except Exception as e:
         print("[!] An error ocurred while cleaning up.")
         return False

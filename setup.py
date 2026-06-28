@@ -357,6 +357,7 @@ def setup():
     if accessibleFiles:
         shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"CodebaseCheck","codebaseCheck.py"),os.path.join(srcPath,"codebaseCheck.py"))
     shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"Report","report.py"),os.path.join(outDir,"report.py"))
+    shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"Report","cleanReport.py"),os.path.join(outDir,"cleanReport.py"))
     return True
     
 if __name__=="__main__":
