@@ -19,9 +19,9 @@ We want to have it in the following format:
     .....
     
 with Type= {"nodeType": "vulnType","name": type, "children": [] => list of variables}
-with variable= {"nodeType": "var","name": variable name, "children":[] => list of files}
+with variable= {"nodeType": "var","name": source, "children":[] => list of files}
 with file= {"nodeType": "file","name": filename, "children":[]=> list of vulnerabilities}
-with vulnerabilty= {"nodeType": "vuln","name": source, "snippet": snippet,"trace":[]=> list of trace}
+with vulnerabilty= {"nodeType": "vuln","line":line,"name": variable_name, "snippet": snippet,"trace":[]=> list of trace}
 with trace= {"label": label, "file": filename, "line": line}
 '''
 import argparse
@@ -59,56 +59,35 @@ def addVulnToReport(vuln,report):
         source= vuln["source"]
         trace= vuln["trace"]
         
-        done=False
         for entry in report:
             if entry["nodeType"]=="vulnType" and entry["name"]==vulnType:
                 if vulnType in listOnly:
                     # we only want to have it in a list
                     if fileName not in entry["children"]:
                         entry["children"].append(fileName)
-                    done=True
-                    break
-                # we found the vulnerabilty type we want to add
-                foundVar= None
-                for var in entry["children"]:
-                    if var["nodeType"]=="var" and var["name"]==variable:
-                        foundVar=var
-                        break
+                    return True
+
+                # find or create the var node
+                foundVar = next((child for child in entry["children"] if child["nodeType"]=="var" and child["name"]==source), None)
                 if foundVar is None:
-                    # we need to create such an entry
-                    foundVar={"nodeType":"var","name":variable,"children":[]}
+                    foundVar = {"nodeType": "var", "name": source, "children": []}
                     entry["children"].append(foundVar)
-                    foundVar= next((child for child in entry["children"] if child["name"]==variable),None)
-                # we now have foundVar
-                if foundVar is None:
-                    e="Couldn't add the children with variable name "+variable
-                    break
-                # we added the variable sucessfully, we go for the next step
-                foundFile= None
-                for file in foundVar["children"]:
-                    if file["nodeType"]=="file" and file["name"]==fileName:
-                        foundFile=file
-                        break
+
+                # find or create the file node
+                foundFile = next((child for child in foundVar["children"] if child["nodeType"]=="file" and child["name"]==fileName), None)
                 if foundFile is None:
-                    # we need to create such an entry
-                    foundFile={"nodeType":"file","name":fileName,"children":[]}
+                    foundFile = {"nodeType": "file", "name": fileName, "children": []}
                     foundVar["children"].append(foundFile)
-                    foundFile= next((child for child in foundVar["children"] if child["name"]==fileName),None)
-                # we now have foundFile
-                if foundFile is None:
-                    e="Couldn't add the children with file name "+fileName
-                    break
-                # we added the file sucessfully, we go for the next step
-                newvuln={"nodeType":"vuln","name":source,"snippet":snippet,"line":line,"trace":trace}
-                duplicate=next((child for child in foundFile["children"] if child["nodeType"]==newvuln["nodeType"] and child["name"]==newvuln["name"] and child["snippet"]==newvuln["snippet"] and child["line"]==newvuln["line"]),None)
+
+                # add vuln if not duplicate
+                newvuln = {"nodeType": "vuln", "name": variable, "snippet": snippet, "line": line, "trace": trace}
+                duplicate = next((child for child in foundFile["children"] if child["nodeType"]==newvuln["nodeType"] and child["name"]==newvuln["name"] and child["snippet"]==newvuln["snippet"] and child["line"]==newvuln["line"]), None)
                 if duplicate is None:
-                    # we can add this
                     foundFile["children"].append(newvuln)
-                done=True
-        if not done:
-            print(f"An error occured while adding vulnerability {vuln} to report: {e}")
-            return False
-        return True
+                return True
+
+        print(f"An error occured while adding vulnerability {vuln} to report: vulnType '{vulnType}' not found in report")
+        return False
     except Exception as e:
         print(f"An error occured while adding vulnerability {vuln} to report: {e}")
         return False
