@@ -1,4 +1,10 @@
 parameters:
+    # Scoped inside the analyzed copy itself (which PHPwn deletes after every run) so
+    # PHPStan's result cache never survives across separate PHPwn invocations. Without
+    # this, PHPStan defaults to a system-wide tmpDir shared by every run on the machine,
+    # and a later run can load stale cache entries pointing at files a previous run's
+    # cleanup already deleted, causing every file to fail with an internal error.
+    tmpDir: .phpstan-tmp
     scanDirectories:
 # SCANDIR_PLACEHOLDER
     paths:

@@ -42,6 +42,12 @@ PSALM_STUB_DIR="stubs"
 PSALM_PLUGIN_DIR="plugins"
 PHPSTAN_DIR="phpstan"
 PHPSTAN_RULES_DIR="rules"
+# PHPStan's own tmpDir (see Templates/PHPStan/phpstan.neon) - scoped inside the analyzed
+# copy so its result cache never survives across separate PHPwn runs. Excluded here too,
+# via the same `excludes` list used for psalm.xml and phpstan.neon, so Psalm doesn't scan
+# it either (harmless today since Psalm runs before PHPStan creates it, but keeps both
+# tools' exclude lists in sync instead of relying on that ordering).
+PHPSTAN_TMP_DIR=".phpstan-tmp"
 
 def addXml(filename,inTag,tag,values):
     if len(values)<=0:
@@ -156,7 +162,7 @@ def updateComposer(filename,namespace,dir):
 def setup():
     srcDir, outDir, excludes, safePatterns, xssPatterns,sqlPatterns, vars,varsFile, accessibleFiles = parseArgs()
     
-    excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR])
+    excludes.extend(["preprocess.php",PSALM_DIR,PHPSTAN_DIR,PHPSTAN_TMP_DIR])
     currentDir=os.path.dirname(os.path.abspath(__file__))
     
     # we first copy the source dir into the temp dir
@@ -227,6 +233,12 @@ def setup():
     shutil.copy(os.path.join(psalmTemplatesDir,"globalVarTainter.php"),psalmPluginsDir)
     shutil.copy(os.path.join(psalmTemplatesDir,"preprocess.php"),srcPath)
     
+    # PHPStan's tmpDir doesn't exist yet at this point (PHPStan only creates it when it
+    # actually runs, later than Psalm). Psalm's ignoreFiles directory entries must resolve
+    # to a real path though, so we pre-create it here (empty) purely so Psalm's config
+    # parser doesn't choke on a path that isn't there yet.
+    os.mkdir(os.path.join(srcPath,PHPSTAN_TMP_DIR))
+
     # Applying exclude dirs to psalm.xml
     entries=[]
     for filename in excludes:

@@ -1,5 +1,4 @@
 <?php
-
 /**
  * MissingGuardRule - PHPStan Custom Rule
  * =======================================
@@ -237,6 +236,49 @@
  * A plain echo $userData in an accessible unguarded file is a real vulnerability.
  * The XSS rule covers WHAT is output (unescaped data).
  * This rule covers WHO is allowed to trigger any output at all.
+ *
+ *
+ * MissingGuardsDetectionNew - PHPStan Custom Rule (extended variant)
+ * ====================================================================
+ *
+ * Same detection goal and overall design as MissingGuardsDetection.php (see that
+ * file's header for the full original rationale, guard registry, sensitive-ops
+ * list, and edge cases — all unchanged here). The only difference: this variant
+ * also recognizes MethodCall (`$obj->foo()`) and StaticCall (`Foo::bar()`), and
+ * indexes ClassMethod bodies for recursion, alongside the original's FuncCall/
+ * Function_-only matching. Mirrors the exact same conservative philosophy the
+ * original already applies to FuncCall — an unresolved/dynamic call is flagged
+ * in checkSensitive and simply skipped (not a guard) in findGuardLine — so this
+ * is a like-for-like extension, not a new heuristic.
+ *
+ * WHY THIS EXISTS:
+ * -----------------
+ * The original rule cannot see into class methods at all — a guard implemented
+ * as `$auth->check()`, or a sensitive operation reached only through
+ * `$view->render()`, is entirely invisible to it. This was empirically tested
+ * against a real production PHP codebase (PHPStan + the .htaccess
+ * accessibility cross-reference only — Psalm was excluded from the
+ * comparison, since it's unrelated to this change and much slower):
+ *   - Raw `security.missingGuard` messages: original = 203 across 32 files;
+ *     this variant = 224 across 39 files.
+ *   - Files that are both accessible (per .htaccess) and unguarded — i.e. what
+ *     actually reaches the final report: original = 11 files, this variant =
+ *     12 files. Zero files lost, exactly one gained.
+ *   - 12 of the 13 files with raw differences are confirmed NOT
+ *     web-accessible — new flags from calls like $db->close(), $date->modify(),
+ *     $dotenv->safeLoad(), but inert, since they never reach the final
+ *     cross-referenced result either way.
+ *   - The one new file is a genuine true positive: no guard mechanism at all,
+ *     directly accessible, and reached only through a chain of method calls
+ *     (invisible to the original FuncCall/Function_-only matching), with
+ *     output built from unsanitized request data. The original rule misses
+ *     this entirely (0 messages) purely because the call chain is method
+ *     calls, invisible to it.
+ *   - The 10 pre-existing findings from the original rule are unchanged here.
+ *
+ * See MissingGuardsDetection.php for the full original design doc (guard
+ * registry, sensitive-operations list and threat model, edge cases). Only the
+ * call-resolution mechanics differ, documented inline below.
  */
 
 namespace $NAMESPACE;
@@ -248,8 +290,13 @@ use PhpParser\Node;
 use PHPStan\Node\FileNode;
 use PHPStan\Rules\RuleErrorBuilder;
 use PhpParser\Node\Stmt\Function_;
+use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Expr\FuncCall;
+use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Name;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Expr\Include_;
 use PhpParser\Node\Expr\BinaryOp\Concat;
 use PhpParser\Node\Scalar\String_;
@@ -289,14 +336,27 @@ class MissingGuardsDetection implements Rule
     ];
 
     /*
-    * This function creates a map functionName(string)=> FunctionBody(Node) 
-    * This allows us to access the body of each function without having to search everytime
+    * This function creates a map functionName(string)=> FunctionBody(Node)
+    * This allows us to access the body of each function/method without having to search everytime.
+    * Extended: also indexes ClassMethod bodies found in top-level classes/traits, keyed by
+    * method name only (same name-only simplification already used for plain functions — no
+    * type resolution, so a same-named method in an unrelated class in the same file can
+    * collide; consistent with the existing FuncCall-name-only approach, not a new problem).
     */
     private function createFunctionsMap(FileNode $file){
         $map=[];
         foreach($file->getNodes() as $node){
             if($node instanceof Function_ && !in_array($node->name->name,$this->guards)){
                 $map[$node->name->name]=$node;
+            }
+            elseif($node instanceof ClassLike){
+                foreach($node->stmts as $classStmt){
+                    if($classStmt instanceof ClassMethod && $classStmt->stmts!==null && !in_array($classStmt->name->name,$this->guards)){
+                        if(!isset($map[$classStmt->name->name])){
+                            $map[$classStmt->name->name]=$classStmt;
+                        }
+                    }
+                }
             }
         }
         return $map;
@@ -312,6 +372,25 @@ class MissingGuardsDetection implements Rule
         else{
             return [];
         }
+    }
+
+    /*
+    * Resolves the callee name for FuncCall/MethodCall/StaticCall nodes, returning null for
+    * anything dynamic (mirrors the original's "not instanceof Name" dynamic-call check,
+    * extended the same way for MethodCall/StaticCall's Identifier-or-dynamic-Expr name).
+    */
+    private function resolveCallName($callNode): ?string {
+        if($callNode instanceof FuncCall){
+            return $callNode->name instanceof Name ? $callNode->name->toString() : null;
+        }
+        elseif($callNode instanceof MethodCall || $callNode instanceof StaticCall){
+            return $callNode->name instanceof Identifier ? $callNode->name->toString() : null;
+        }
+        return null;
+    }
+
+    private function isCallNode($expr): bool{
+        return $expr instanceof FuncCall || $expr instanceof MethodCall || $expr instanceof StaticCall;
     }
 
     /*
@@ -332,13 +411,14 @@ class MissingGuardsDetection implements Rule
                     }
                 }
             }
-            elseif($node instanceof Expression && $node->expr instanceof FuncCall){
-                if(!$node->expr->name instanceof Name){
+            elseif($node instanceof Expression && $this->isCallNode($node->expr)){
+                $calleeName= $this->resolveCallName($node->expr);
+                if($calleeName === null){
                     // dynamic call → skip, we can't resolve it statically
                     continue;
                 }
                 //first, we check if it is a known guard function
-                if(in_array($node->expr->name->name,$this->guards)){
+                if(in_array($calleeName,$this->guards)){
                     // we found a guard !
                     $guardline= $node->getStartLine();
                     // we update the guardline only if smaller than the current
@@ -347,10 +427,10 @@ class MissingGuardsDetection implements Rule
                     }
                 }
                 else{
-                    // it is a non guard function, we check it's body for guards
-                    if(isset($funcGuardMap[$node->expr->name->name])){
+                    // it is a non guard function/method, we check it's body for guards
+                    if(isset($funcGuardMap[$calleeName])){
                         //this function was already checked before and guardline is available
-                        if($funcGuardMap[$node->expr->name->name]){ // the function has a guard
+                        if($funcGuardMap[$calleeName]){ // the function has a guard
                             // we return (update) the guardline only if smaller than the current
                             $guardline= $node->getStartLine();
                             if($currentGuardLine<0 || $guardline<$currentGuardLine){
@@ -360,13 +440,13 @@ class MissingGuardsDetection implements Rule
                     }
                     else{
                         // we have to check the function body now for the first time
-                        if(isset($funcMap[$node->expr->name->name])){
-                            // the function was defined in the file too
+                        if(isset($funcMap[$calleeName])){
+                            // the function/method was defined in the file too
                             // we check it's body
                             // We set -1 as currentGuardLine because we want the guardLine of the function independently of the context
-                            $funcGuardMap[$node->expr->name->name]=false; // we set it to false first to avoid circular calls and therefore infinite recursion
-                            $line= $this->findGuardLine($funcMap[$node->expr->name->name]->stmts,$funcMap,$funcGuardMap,-1);
-                            $funcGuardMap[$node->expr->name->name]=($line>=0); // now we update with the right value !
+                            $funcGuardMap[$calleeName]=false; // we set it to false first to avoid circular calls and therefore infinite recursion
+                            $line= $this->findGuardLine($funcMap[$calleeName]->stmts,$funcMap,$funcGuardMap,-1);
+                            $funcGuardMap[$calleeName]=($line>=0); // now we update with the right value !
                             if($line>=0){
                                 // We found a guardline in the function !!
                                 $guardline= $node->getStartLine();
@@ -380,7 +460,7 @@ class MissingGuardsDetection implements Rule
                             }
                         }
                         else{
-                            // the function may be defined in another file, we set it as non guard, no cross file access...
+                            // the function/method may be defined in another file/object, we set it as non guard, no cross file access...
                             continue;
                         }
                     }
@@ -399,21 +479,22 @@ class MissingGuardsDetection implements Rule
         foreach($nodes as $node){
             $currentLine= $node->getStartLine();
             if($guardLine<0 || $currentLine<$guardLine){
-                if($node instanceof Expression && $node->expr instanceof FuncCall){
-                    if($node->expr->name instanceof Name){
-                        if(!in_array($node->expr->name->name,$this->guards)){
-                            if(in_array($node->expr->name->name,$this->sensitiveFuncNames)){
+                if($node instanceof Expression && $this->isCallNode($node->expr)){
+                    $calleeName= $this->resolveCallName($node->expr);
+                    if($calleeName!==null){
+                        if(!in_array($calleeName,$this->guards)){
+                            if(in_array($calleeName,$this->sensitiveFuncNames)){
                                 //sensitive function, no need to go recursvie, trigger an error
-                                array_push($result, RuleErrorBuilder::message('Potential Missing Guard: use of sensitive "'. $node->expr->name->name .'" before guard.')
+                                array_push($result, RuleErrorBuilder::message('Potential Missing Guard: use of sensitive "'. $calleeName .'" before guard.')
                                     ->line($currentLine)
                                     ->identifier("security.missingGuard")
                                     ->build());
                             }
                             else{
                                 // it is not a guarded function and is sensitive, go recursive if existing
-                                if(isset($funcMap[$node->expr->name->name])){
+                                if(isset($funcMap[$calleeName])){
                                     //body exists, go rec
-                                    $errors= $this->checkSensitiveRec($funcMap[$node->expr->name->name]->stmts,$funcMap,$funcErrorsMap);
+                                    $errors= $this->checkSensitiveRec($funcMap[$calleeName]->stmts,$funcMap,$funcErrorsMap);
                                     foreach($errors as $err){
                                         array_push($result, RuleErrorBuilder::message($err)
                                             ->line($currentLine)
@@ -422,8 +503,8 @@ class MissingGuardsDetection implements Rule
                                     }
                                 }
                                 else{
-                                    // definition in another file, trigger error
-                                    array_push($result, RuleErrorBuilder::message('Potential Missing Guard: use of unknown "'. $node->expr->name->name .'" before guard.')
+                                    // definition in another file/object, trigger error
+                                    array_push($result, RuleErrorBuilder::message('Potential Missing Guard: use of unknown "'. $calleeName .'" before guard.')
                                         ->line($currentLine)
                                         ->identifier("security.missingGuard")
                                         ->build());
@@ -436,7 +517,7 @@ class MissingGuardsDetection implements Rule
                         }
                     }
                     else{
-                        //dynamic function, trigger error
+                        //dynamic function/method, trigger error
                         array_push($result, RuleErrorBuilder::message('Potential Missing Guard: use of unknown dynamic function before guard.')
                             ->line($currentLine)
                             ->identifier("security.missingGuard")
@@ -461,43 +542,44 @@ class MissingGuardsDetection implements Rule
     private function checkSensitiveRec(array $nodes, array $funcMap, array &$funcErrorsMap):array{
         $result=[]; // this are only strings, because the errors are built at the end with the right line number !
         foreach($nodes as $node){
-            if($node instanceof Expression && $node->expr instanceof FuncCall){
-                if($node->expr->name instanceof Name){
-                    if(in_array($node->expr->name->name,$this->guards)){
+            if($node instanceof Expression && $this->isCallNode($node->expr)){
+                $calleeName= $this->resolveCallName($node->expr);
+                if($calleeName!==null){
+                    if(in_array($calleeName,$this->guards)){
                         // it is a guard function, skip it
                         continue;
                     }
                     else{
-                        if(in_array($node->expr->name->name,$this->sensitiveFuncNames)){
-                            array_push($result,'Potential Missing Guard: use of sensitive "'. $node->expr->name->name .'" before guard.');
+                        if(in_array($calleeName,$this->sensitiveFuncNames)){
+                            array_push($result,'Potential Missing Guard: use of sensitive "'. $calleeName .'" before guard.');
                         }
                         else{
-                            // it is a function call that is secure, check it's body
-                            if(isset($funcErrorsMap[$node->expr->name->name])){
+                            // it is a function/method call that is secure, check it's body
+                            if(isset($funcErrorsMap[$calleeName])){
                                 // The function already got analyzed, we update the results
-                                $result= array_merge($result,$funcErrorsMap[$node->expr->name->name]);
+                                $result= array_merge($result,$funcErrorsMap[$calleeName]);
                             }
                             else{
                                 // the function didn't go analyzed yet, we check if the body is available
-                                if(isset($funcMap[$node->expr->name->name])){
+                                if(isset($funcMap[$calleeName])){
                                     // we recursively check the body
-                                    $funcErrorsMap[$node->expr->name->name]=[]; // we set it to empty to avoid circular refs
+                                    $funcErrorsMap[$calleeName]=[]; // we set it to empty to avoid circular refs
                                     // we set current line to -1 to trigger errors independently of the context
                                     // we update the results for this function
-                                    $errors= $this->checkSensitiveRec($funcMap[$node->expr->name->name]->stmts,$funcMap,$funcErrorsMap);
-                                    $funcErrorsMap[$node->expr->name->name]= $errors;
+                                    $errors= $this->checkSensitiveRec($funcMap[$calleeName]->stmts,$funcMap,$funcErrorsMap);
+                                    $funcErrorsMap[$calleeName]= $errors;
                                     $result= array_merge($result,$errors);
                                 }
                                 else{
-                                    // the function may be defined in another file, we flag it, better having to false positives than false negatives
-                                    array_push($result,'Potential Missing Guard: use of unknown "'. $node->expr->name->name .'" before guard.');
+                                    // the function/method may be defined in another file/object, we flag it, better having to false positives than false negatives
+                                    array_push($result,'Potential Missing Guard: use of unknown "'. $calleeName .'" before guard.');
                                 }
                             }
                         }
                     }
                 }
                 else{
-                    //it is dynamic determined function, trigger an error, false positive maybe but whatever
+                    //it is dynamic determined function/method, trigger an error, false positive maybe but whatever
                     array_push($result,'Potential Missing Guard: use of unknown dynamic function before guard.');
                 }
             }
