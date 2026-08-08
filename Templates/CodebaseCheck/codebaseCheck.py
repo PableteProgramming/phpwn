@@ -123,7 +123,7 @@ class CodeBaseChecker:
             toCheck=[file]
             if dirIndex and Path(file).name==dirIndex:
                 # we have to check if the directory is accessible too
-                toCheck.append(Path(file).parent)
+                toCheck.append(str(Path(file).parent))
             
             # First we check if directServing is enabled
             if self.directServing:
@@ -149,7 +149,7 @@ class CodeBaseChecker:
                 for entry in toCheck:
                     ok=False
                     for p in accessiblePaths:
-                        if p==entry:
+                        if p.lstrip("/")==entry.lstrip("/"):
                             ok=True
                             break
                     if ok:
