@@ -43,6 +43,7 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Scalar\Int_;
+use PhpParser\Node\ArrayItem;
 
 
 class globalVarTainter implements PluginEntryPointInterface, AddTaintsInterface
