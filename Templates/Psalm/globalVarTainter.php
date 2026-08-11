@@ -39,7 +39,6 @@ use Psalm\PluginRegistrationSocket;
 use PhpParser\Node\Expr\Variable;
 use Psalm\Type\TaintKind;
 use PhpParser\Node;
-use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Scalar\Int_;
@@ -148,13 +147,9 @@ class globalVarTainter implements PluginEntryPointInterface, AddTaintsInterface
      * If the expression is a variable in our taint list, we return the taint kinds.
      * Psalm propagates them through the dataflow graph automatically.
      *
-     * Why all these taint kinds?
-     *   INPUT_SQL   — $request used in a query              → SQLi
-     *   INPUT_HTML  — $request echoed in HTML               → XSS
-     *   INPUT_SHELL — $request passed to exec()             → shell injection
-     *   INPUT_SSRF  — $request passed to curl               → SSRF
-     *   INPUT_FILE  — $request passed to include/require    → file inclusion
-     *   INPUT_COOKIE / INPUT_HEADER — $request wraps these  → covered
+     * Taint kinds emitted:
+     *   INPUT_SQL  — $request used in a query   → SQLI
+     *   INPUT_HTML — $request echoed in HTML    → XSS
      */
     public static function addTaints(AddRemoveTaintsEvent $event): array
     {
