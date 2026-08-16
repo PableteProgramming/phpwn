@@ -274,7 +274,7 @@
  *     output built from unsanitized request data. The original rule misses
  *     this entirely (0 messages) purely because the call chain is method
  *     calls, invisible to it.
- *   - The 10 pre-existing findings from the original rule are unchanged here.
+ *   - The 11 pre-existing findings from the original rule are unchanged here.
  *
  * See MissingGuardsDetection.php for the full original design doc (guard
  * registry, sensitive-operations list and threat model, edge cases). Only the

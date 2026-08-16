@@ -45,7 +45,7 @@ PHPwn runs in three stages:
    python3 PHPwn.py "/path/to/your/project"
    ```
 
-**Variable classification:** if `phpwn.vars.json` does not exist yet, PHPwn will create it automatically on the first run and exit. Open it, review the discovered global variables, set each `"type"` to `"safe"` or `"input"` as appropriate (see [Variable Classification](#variable-classification-phpwnvarsjson) below), then re-run the same command to perform the full analysis. If the file already exists, PHPwn proceeds directly to analysis.
+**Variable classification:** if `phpwn.vars.json` does not exist yet, PHPwn will create it automatically on the first run and exit. Open it, review the discovered global variables, set each variable's `taint.xss` and `taint.sql` as appropriate (see [Variable Classification](#variable-classification-phpwnvarsjson) below), then re-run the same command to perform the full analysis. If the file already exists, PHPwn proceeds directly to analysis.
 
 ### VS Code Extension
 
@@ -119,16 +119,24 @@ Each finding includes the vulnerability type, file, line number, code snippet, t
 On first run, PHPwn discovers all PHP global variables in the codebase via AST traversal and saves them to `variablesFile`. Each entry looks like:
 
 ```json
-{ "name": "request", "type": "unknown" }
+{
+  "name": "request",
+  "taint": { "xss": null, "sql": null },
+  "children": {
+    "post": { "name": "request.post", "taint": { "xss": false, "sql": true }, "children": {} }
+  }
+}
 ```
 
-You must review and set the `"type"` for each variable before the full analysis can run:
+You must review and set `taint.xss` and `taint.sql` for each variable before the full analysis can run:
 
-| Type | Meaning |
+| Value | Meaning |
 |---|---|
-| `"input"` | Variable may contain user-controlled data — will be treated as a taint source |
-| `"safe"` | Variable is internal/config data — will not be tainted |
-| `"unknown"` | Treated the same as `"input"` (conservative default) |
+| `true` | Variable is tainted for that Taint Kind — will be treated as a taint source |
+| `false` | Variable is safe for that Taint Kind — will not be tainted |
+| `null` | Not yet classified |
+
+`xss` and `sql` are classified independently, so a variable can be a source for one and safe for the other. `children` lets array keys of the same global (e.g. `request.post` vs. `request.db`) be classified independently too — but only if the parent itself is left `null`; setting a parent's `taint` to a non-null value cascades that classification down to all of its children, overwriting any of their individual settings.
 
 ---
 
