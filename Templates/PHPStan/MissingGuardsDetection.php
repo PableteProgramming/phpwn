@@ -347,7 +347,9 @@ class MissingGuardsDetection implements Rule
         $map=[];
         foreach($file->getNodes() as $node){
             if($node instanceof Function_ && !in_array($node->name->name,$this->guards)){
-                $map[$node->name->name]=$node;
+                if(!isset($map[$node->name->name])){
+                    $map[$node->name->name]=$node;
+                }
             }
             elseif($node instanceof ClassLike){
                 foreach($node->stmts as $classStmt){
