@@ -1,0 +1,158 @@
+{
+  "name": "phpwn",
+  "displayName": "phpwn",
+  "description": "PHPwn is a tool for static code analysis for pentester",
+  "publisher": "pablo",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.118.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "phpwn",
+          "title": "PHPwn",
+          "icon": "resources/test.svg"
+        }
+      ]
+    },
+    "views": {
+      "phpwn": [
+        {
+          "id": "phpwnVariables",
+          "name": "PHPwn Variables",
+          "icon": "resources/phpwn.svg"
+        },
+        {
+          "id": "phpwnResults",
+          "name": "PHPwn Results",
+          "icon": "resources/phpwn.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "phpwn.run",
+        "title": "PHPwn: Run Analysis"
+      },
+      {
+        "command": "phpwn.showReport",
+        "title": "PHPwn: Load Report"
+      },
+      {
+        "command": "phpwn.markXSS",
+        "title": "XSS",
+        "icon": "$(code)"
+      },
+      {
+        "command": "phpwn.markSQL",
+        "title": "SQL",
+        "icon": "$(database)"
+      },
+      {
+        "command": "phpwn.markBoth",
+        "title": "Both",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "phpwn.markNone",
+        "title": "None",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "phpwn.markUnclassified",
+        "title": "Unclassified",
+        "icon": "$(question)"
+      },
+      {
+        "command": "phpwn.refreshReport",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "phpwn.refreshVariables",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "phpwn.configure",
+        "title": "PHPwn: Configure"
+      }
+    ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "phpwn.markXSS",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@1"
+        },
+        {
+          "command": "phpwn.markSQL",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@2"
+        },
+        {
+          "command": "phpwn.markBoth",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@3"
+        },
+        {
+          "command": "phpwn.markNone",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@4"
+        },
+        {
+          "command": "phpwn.markUnclassified",
+          "when": "view == phpwnVariables && viewItem =~ /^phpwnVar_/",
+          "group": "inline@4"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "phpwn.refreshReport",
+          "when": "view == phpwnResults",
+          "group": "navigation"
+        },
+        {
+          "command": "phpwn.refreshVariables",
+          "when": "view == phpwnVariables",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.118.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.39.3",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "webpack": "^5.105.3",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17"
+  }
+}
