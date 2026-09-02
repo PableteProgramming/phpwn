@@ -53,9 +53,13 @@ def main():
     srcDir,configure= parseArgs()
     currentDir=os.path.dirname(os.path.abspath(__file__))
     if configure:
+        configPath= os.path.join(srcDir,CONFIG_FILE)
+        if os.path.exists(configPath):
+            print(f"[+] {CONFIG_FILE} already exists in {srcDir}, leaving it untouched.")
+            return True
         print(f"[+] Copying configuration file: {CONFIG_FILE}")
         try:
-            shutil.copy2(os.path.join(currentDir,"Templates/phpwn.config.json"), os.path.join(srcDir,CONFIG_FILE))
+            shutil.copy2(os.path.join(currentDir,"Templates/phpwn.config.json"), configPath)
         except Exception as e:
             print(f"[!] Error copying {CONFIG_FILE} file: {e}")
             return False
@@ -71,7 +75,7 @@ def main():
         outDirAbs=Path(os.path.realpath(os.path.join(currentDir,srcDir,config["outputDir"]))).absolute()
         varsFileAbs=Path(os.path.realpath(os.path.join(currentDir,srcDir,config["variablesFile"]))).absolute()
         vars= os.path.exists(varsFileAbs)
-        if not runCommandOrFail([sys.executable, "wrapper.py", srcDirAbs,outDirAbs,"--excludes",*config["excludes"],"--vars-file",varsFileAbs,"--output-json",config["outputJson"],"--output-csv",config["outputCsv"]]+(["--direct-serving"] if config["accessibleFiles"]["directServing"] and config["accessibleFiles"]["enabled"] else [])+(["--accessible-files", "--htaccess-path", config["accessibleFiles"]["htaccessPath"]] if config["accessibleFiles"]["enabled"] else []),os.getcwd(),[0,2]):
+        if not runCommandOrFail([sys.executable, "wrapper.py", srcDirAbs,outDirAbs,"--excludes",*config["excludes"],"--vars-file",varsFileAbs,"--output-json",config["outputJson"],"--output-csv",config["outputCsv"]]+(["--direct-serving"] if config["accessibleFiles"]["directServing"] and config["accessibleFiles"]["enabled"] else [])+(["--accessible-files", "--htaccess-path", config["accessibleFiles"]["htaccessPath"]] if config["accessibleFiles"]["enabled"] else []),currentDir,[0,2]):
             print(f"[!] An error ocurred while calling wrapper.py")
             return False 
         return True if vars else None
