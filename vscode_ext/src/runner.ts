@@ -70,7 +70,10 @@ async function setupVenv(workspaceRoot: string): Promise<void> {
     const venvDir = path.join(extractDir, '.venv');
     // Create venv only if it doesn't exist
     if (!fs.existsSync(venvDir)) {
-        await runCommand('python3 -m venv .venv', extractDir);
+        const r = await runCommand('python3 -m venv .venv', extractDir);
+        if (r.code !== 0) {
+            throw new Error(`Failed to create the Python virtual environment: ${r.stderr || r.stdout}`);
+        }
     }
 
     // Always install requirements in case they changed
@@ -78,10 +81,13 @@ async function setupVenv(workspaceRoot: string): Promise<void> {
         ? path.join(venvDir, 'Scripts', 'pip.exe')
         : path.join(venvDir, 'bin', 'pip3');
 
-    await runCommand(`"${pip}" install -r requirements.txt`, extractDir);
+    const r = await runCommand(`"${pip}" install -r requirements.txt`, extractDir);
+    if (r.code !== 0) {
+        throw new Error(`Failed to install PHPwn's Python dependencies: ${r.stderr || r.stdout}`);
+    }
 }
 
-// This function configures PHPwn by extracting it, setting up the virtual environment, 
+// This function configures PHPwn by extracting it, setting up the virtual environment,
 // and running the configuration command.
 export async function configurePHPwn(context: vscode.ExtensionContext, workspaceRoot: string): Promise<void> {
     await vscode.window.withProgress({
@@ -99,7 +105,10 @@ export async function configurePHPwn(context: vscode.ExtensionContext, workspace
         const extractDir = getExtractDir(workspaceRoot);
         const python = getVenvPython(workspaceRoot);
 
-        await runCommand(`"${python}" PHPwn.py --configure ${path.relative(extractDir, workspaceRoot)}`, extractDir);
+        const r = await runCommand(`"${python}" PHPwn.py --configure ${path.relative(extractDir, workspaceRoot)}`, extractDir);
+        if (r.code !== 0) {
+            throw new Error(`PHPwn configuration failed: ${r.stderr || r.stdout}`);
+        }
     });
 }
 

@@ -233,20 +233,37 @@ def setup():
     shutil.copy(os.path.join(psalmTemplatesDir,"globalVarTainter.php"),psalmPluginsDir)
     shutil.copy(os.path.join(psalmTemplatesDir,"preprocess.php"),srcPath)
     
-    # PHPStan's tmpDir doesn't exist yet at this point (PHPStan only creates it when it
-    # actually runs, later than Psalm). Psalm's ignoreFiles directory entries must resolve
-    # to a real path though, so we pre-create it here (empty) purely so Psalm's config
-    # parser doesn't choke on a path that isn't there yet.
+    # PHPStan's tmpDir and its rules dir don't exist yet at this point (PHPStan itself
+    # only creates tmpDir when it actually runs, later than Psalm, and the rules dir is
+    # normally only populated further down). Psalm's ignoreFiles directory entries must
+    # resolve to a real path though, so we pre-create these here (empty) purely so Psalm's
+    # config parser doesn't choke on a path that isn't there yet.
     os.mkdir(os.path.join(srcPath,PHPSTAN_TMP_DIR))
+    phptanDir=os.path.join(srcPath,PHPSTAN_DIR)
+    phpstanRulesDir= os.path.join(phptanDir,PHPSTAN_RULES_DIR)
+    os.mkdir(phptanDir)
+    os.mkdir(phpstanRulesDir)
 
     # Applying exclude dirs to psalm.xml
     entries=[]
     for filename in excludes:
         entries.append({"name":filename})
-        
+
     excludesFiles=[f for f in entries if Path(os.path.join(srcPath,f["name"])).is_file()]
-    excludesDirs=[f for f in entries if f not in excludesFiles]
-        
+    excludesDirs=[]
+    for f in entries:
+        if f in excludesFiles:
+            continue
+        excludePath= Path(os.path.join(srcPath,f["name"]))
+        if not excludePath.exists():
+            # Excludes like ".phpwn" (relevant only when PHPwn runs from inside the
+            # analyzed project, e.g. via the VS Code extension) may simply not exist for
+            # this target. Psalm still needs the path to resolve, so we create an empty
+            # placeholder - there's nothing to scan there anyway, and it's removed along
+            # with the rest of srcPath once the analysis finishes.
+            excludePath.mkdir(parents=True)
+        excludesDirs.append(f)
+
     if addXml(os.path.join(srcPath,"psalm.xml"),"projectFiles/ignoreFiles","file",excludesFiles):
         print(f"[+] Excludes files where appended to psalm.xml")
     else:
@@ -309,19 +326,18 @@ def setup():
     if not runCommandOrFail(["php", "preprocess.php"],srcPath):
         return False
     
-    # now copying all necessary PHPStan 
+    # now copying all necessary PHPStan
     print("[+] Copying all necessary PHPStan setup files")
-    phptanDir=os.path.join(srcPath,PHPSTAN_DIR)
-    phpstanRulesDir= os.path.join(phptanDir,PHPSTAN_RULES_DIR)
-    os.mkdir(phptanDir)
-    os.mkdir(phpstanRulesDir)
     for file in Path(os.path.join(currentDir,TEMPLATE_DIR,"PHPStan")).glob("*.php"):
         shutil.copy(file, os.path.join(phpstanRulesDir,file.name))
-        
+
     shutil.copy(os.path.join(currentDir,TEMPLATE_DIR,"PHPStan","phpstan.neon"),os.path.join(srcPath,"phpstan.neon"))
-    
+
     print("[+] Applying excludes and custom Rules to phpstan.neon")
-    excludesBlock="\n".join([f"        - {d}" for d in excludes])
+    # "(?)" marks each entry as optional so PHPStan doesn't choke on excludes that don't
+    # exist for this target (e.g. ".phpwn", only relevant when PHPwn runs from inside the
+    # analyzed project).
+    excludesBlock="\n".join([f"        - {d} (?)" for d in excludes])
     if replaceInFile(os.path.join(srcPath,"phpstan.neon"),"# EXCLUDE_PLACEHOLDER",excludesBlock):
         print("[+] excludes replaced successfully")
     else:

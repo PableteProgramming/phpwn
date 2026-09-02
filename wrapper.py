@@ -91,11 +91,12 @@ def buildVarsList(varsFile):
 
 def main():
     srcDir,outDir,excludes,varsFile,outputJson,outputCsv,directServing,htaccessPath,accessibleFiles= parseArgs()
-    
+    currentDir=os.path.dirname(os.path.abspath(__file__))
+
     if not os.path.exists(varsFile):
         # if the file is not existing yet, we need to create it, and let the user choose.
         print("[+] Running variables setup...")
-        if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir,]+(["--excludes",*excludes] if len(excludes)>0 else [])+["--vars","--vars-file",varsFile],os.getcwd()):
+        if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir,]+(["--excludes",*excludes] if len(excludes)>0 else [])+["--vars","--vars-file",varsFile],currentDir):
             print("[!] An error ocurred during setup. Exiting...")
             return False
         return None # not true, because variables config
@@ -103,13 +104,13 @@ def main():
     ok,safeVars,xssVars,SqlVars= buildVarsList(varsFile)
     if not ok:
         return False
-    
+
     print("[+] Setting up PHPwn...")
-    if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir]+(["--excludes",*excludes] if len(excludes)>0 else [])+(["--safe-patterns",*safeVars] if len(safeVars)>0 else [])+(["--xss-patterns",*xssVars] if len(xssVars)>0 else [])+(["--sql-patterns",*SqlVars] if len(SqlVars)>0 else [])+(["--accessible-files"] if accessibleFiles else []),os.getcwd()):
+    if not runCommandOrFail([sys.executable, "setup.py", srcDir,outDir]+(["--excludes",*excludes] if len(excludes)>0 else [])+(["--safe-patterns",*safeVars] if len(safeVars)>0 else [])+(["--xss-patterns",*xssVars] if len(xssVars)>0 else [])+(["--sql-patterns",*SqlVars] if len(SqlVars)>0 else [])+(["--accessible-files"] if accessibleFiles else []),currentDir):
         print("[!] An error ocurred during setup. Exiting...")
         return False
     print("[+] Starting analysis. This may take a while...")
-    if not runCommandOrFail([sys.executable, "run.py", srcDir,outDir,"--output-json",outputJson,"--output-csv",outputCsv]+(["--direct-serving"] if directServing else [])+(["--accessible-files", "--htaccess-path", htaccessPath] if accessibleFiles else []),os.getcwd()):
+    if not runCommandOrFail([sys.executable, "run.py", srcDir,outDir,"--output-json",outputJson,"--output-csv",outputCsv]+(["--direct-serving"] if directServing else [])+(["--accessible-files", "--htaccess-path", htaccessPath] if accessibleFiles else []),currentDir):
         print("[!] An error ocurred during analysis. Exiting...")
         return False
     print("[+] Analysis done !")
