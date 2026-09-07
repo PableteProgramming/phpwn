@@ -5,17 +5,22 @@ import { ReportProvider } from './reportProvider';
 import { VariablesProvider } from './variablesProvider';
 import { runPHPwn, configurePHPwn } from './runner';
 
-// This function is called when the extension is activated. 
+// This function is called when the extension is activated.
 // It sets up the commands and tree data providers for the extension to use later on.
 
 // the needed constants for the extension
 export const CONFIG_FILE_NAME = 'phpwn.config.json';
 
 export function activate(context: vscode.ExtensionContext) {
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+    // Read fresh on every call (not captured once here) so commands keep
+    // working correctly if the workspace folder changes after activation.
+    function getWorkspaceRoot(): string | undefined {
+        return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    }
 
     // This function gives the absolute path to the config file if it exists, otherwise returns null
     function getConfigPath(): string | null {
+        const workspaceRoot = getWorkspaceRoot();
         if (!workspaceRoot) { return null; }
         return path.join(workspaceRoot, CONFIG_FILE_NAME);
     }
@@ -28,16 +33,22 @@ export function activate(context: vscode.ExtensionContext) {
 
     // This function retrieves the path to the variables file specified in the config file
     function getVarsFilePath(): string | null {
+        const workspaceRoot = getWorkspaceRoot();
         if (!workspaceRoot) { return null; }
         if(!configExists()) { return null; }
         const configPath = getConfigPath();
         if (!configPath) { return null; }
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        if (!config.variablesFile) {
-            vscode.window.showErrorMessage('PHPwn: variablesFile not specified in config.');
+        try {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            if (!config.variablesFile) {
+                vscode.window.showErrorMessage('PHPwn: variablesFile not specified in config.');
+                return null;
+            }
+            return path.resolve(workspaceRoot, config.variablesFile);
+        } catch (e) {
+            vscode.window.showErrorMessage(`PHPwn: Failed to read ${CONFIG_FILE_NAME}: ${e}`);
             return null;
         }
-        return path.resolve(workspaceRoot, config.variablesFile);
     }
 
     // Create instances of the ReportProvider and VariablesProvider classes, and register them with VS Code
@@ -49,6 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
     // the PHPwn run Command: this is the main command that runs the PHPwn analysis
     context.subscriptions.push(
         vscode.commands.registerCommand('phpwn.run', async () => {
+            const workspaceRoot = getWorkspaceRoot();
             if (!workspaceRoot) {
                 vscode.window.showErrorMessage('PHPwn: No workspace folder open.');
                 return;
@@ -61,7 +73,7 @@ export function activate(context: vscode.ExtensionContext) {
             try {
                 // Now, we run the PHPwn analysis using the runPHPwn function defined in runner.ts.
                 const result = await runPHPwn(context, workspaceRoot);
-                // if the result is 'vars', it means that the analysis found variables that need to be categorized, 
+                // if the result is 'vars', it means that the analysis found variables that need to be categorized,
                 // so we refresh the variables panel and show a message to the user.
                 if (result === 'vars') {
                     const varsFile = getVarsFilePath();
@@ -82,6 +94,7 @@ export function activate(context: vscode.ExtensionContext) {
     // This is the command to show the report panel.
     context.subscriptions.push(
         vscode.commands.registerCommand('phpwn.showReport', () => {
+            const workspaceRoot = getWorkspaceRoot();
             if (!workspaceRoot) {
                 vscode.window.showErrorMessage('PHPwn: No workspace folder open.');
                 return;
@@ -130,6 +143,7 @@ export function activate(context: vscode.ExtensionContext) {
     // This is the refresh button for the report panel
     context.subscriptions.push(
         vscode.commands.registerCommand('phpwn.refreshReport', () => {
+            const workspaceRoot = getWorkspaceRoot();
             if (!workspaceRoot) { return; }
             reportProvider.refresh(workspaceRoot);
         })
@@ -147,6 +161,7 @@ export function activate(context: vscode.ExtensionContext) {
     // this is the configure command, it creates the config file if not existing.
     context.subscriptions.push(
         vscode.commands.registerCommand('phpwn.configure', () => {
+            const workspaceRoot = getWorkspaceRoot();
             if (!workspaceRoot) {
                 vscode.window.showErrorMessage('PHPwn: No workspace folder open.');
                 return;

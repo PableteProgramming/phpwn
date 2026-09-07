@@ -1,0 +1,77 @@
+name: Publish Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Extension version, e.g. 0.1.0'
+        required: true
+      phpwn_version:
+        description: 'Core PHPwn release tag to bundle (e.g. v1.0.0, or "latest")'
+        required: true
+        default: 'latest'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: vscode_ext
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set extension version
+        run: npm version "${{ inputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Resolve and download core PHPwn release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.phpwn_version }}" = "latest" ]; then
+            resolved_tag=$(gh release view --repo PableteProgramming/phpwn --json tagName -q .tagName)
+          else
+            resolved_tag="${{ inputs.phpwn_version }}"
+          fi
+          echo "Resolved core PHPwn version: $resolved_tag"
+          gh release download "$resolved_tag" \
+            --repo PableteProgramming/phpwn \
+            --pattern 'PHPwn-*.zip' \
+            --output resources/PHPwn.zip --clobber
+          echo "$resolved_tag" > resources/PHPWN_VERSION.txt
+
+      - name: Type-check
+        run: npx tsc --noEmit -p .
+
+      - name: Lint
+        run: npx eslint src
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run compile
+
+      - name: Package extension
+        run: npx vsce package --out phpwn.vsix
+
+      - name: Attach .vsix to a GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ext-v${{ inputs.version }}
+          name: Extension v${{ inputs.version }}
+          files: vscode_ext/phpwn.vsix
+
+      - name: Publish to VS Code Marketplace
+        run: npx vsce publish -p "${{ secrets.VSCE_PAT }}"

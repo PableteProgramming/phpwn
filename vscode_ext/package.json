@@ -1,14 +1,23 @@
 {
   "name": "phpwn",
-  "displayName": "phpwn",
-  "description": "PHPwn is a tool for static code analysis for pentester",
-  "publisher": "pablo",
-  "version": "0.0.1",
+  "displayName": "PHPwn",
+  "description": "Static analysis for PHP security auditing (SQLI, XSS, missing access guards) powered by Psalm and PHPStan.",
+  "publisher": "PableteProgramming",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PableteProgramming/phpwn.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PableteProgramming/phpwn/issues"
+  },
+  "homepage": "https://github.com/PableteProgramming/phpwn#readme",
   "engines": {
     "vscode": "^1.118.0"
   },
   "categories": [
-    "Other"
+    "Linters"
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
@@ -18,7 +27,7 @@
         {
           "id": "phpwn",
           "title": "PHPwn",
-          "icon": "resources/test.svg"
+          "icon": "resources/phpwn.svg"
         }
       ]
     },
@@ -132,11 +141,13 @@
     "compile": "webpack",
     "watch": "webpack --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
+    "package-vsix": "vsce package --out phpwn.vsix",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "test:unit": "npm run compile-tests && mocha --ui tdd out/test/commandBuilders.test.js"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
@@ -145,7 +156,9 @@
     "@types/vscode": "^1.118.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.9.2",
     "eslint": "^9.39.3",
+    "mocha": "^12.0.0",
     "ts-loader": "^9.5.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
