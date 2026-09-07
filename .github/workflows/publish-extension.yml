@@ -74,4 +74,13 @@ jobs:
           files: vscode_ext/phpwn.vsix
 
       - name: Publish to VS Code Marketplace
-        run: npx vsce publish -p "${{ secrets.VSCE_PAT }}"
+        run: |
+          for attempt in 1 2 3; do
+            if npx vsce publish -p "${{ secrets.VSCE_PAT }}"; then
+              exit 0
+            fi
+            echo "vsce publish failed (attempt $attempt/3), retrying in 30s..."
+            sleep 30
+          done
+          echo "::error::vsce publish failed after 3 attempts"
+          exit 1
