@@ -4,6 +4,7 @@
   "description": "Static analysis for PHP security auditing (SQLI, XSS, missing access guards) powered by Psalm and PHPStan.",
   "publisher": "PabloMODev",
   "version": "0.1.0",
+  "icon": "resources/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
