@@ -40,7 +40,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ inputs.phpwn_version }}" = "latest" ]; then
-            resolved_tag=$(gh release view --repo PableteProgramming/phpwn --json tagName -q .tagName)
+            # gh release view (no tag) returns the single most-recently-created
+            # release repo-wide, which would pick up this workflow's own
+            # ext-v* releases once any exist. Filter to core-tool tags (v*,
+            # excluding ext-v*) and take the newest of those instead.
+            resolved_tag=$(gh release list --repo PableteProgramming/phpwn --json tagName -q '[.[] | select(.tagName | test("^v[0-9]"))] | .[0].tagName')
+            if [ -z "$resolved_tag" ]; then
+              echo "::error::Could not find any core PHPwn release (tags matching v*, excluding ext-v*)"
+              exit 1
+            fi
           else
             resolved_tag="${{ inputs.phpwn_version }}"
           fi
