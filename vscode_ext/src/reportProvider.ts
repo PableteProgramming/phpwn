@@ -138,17 +138,21 @@ export class ReportProvider implements vscode.TreeDataProvider<ReportNode> {
             return [new ReportNode('No phpwn.config.json found', 'placeholder', vscode.TreeItemCollapsibleState.None)];
         }
 
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        const reportPath = path.join(workspaceRoot, config.outputDir, config.outputJson);
+        try {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            const reportPath = path.join(workspaceRoot, config.outputDir, config.outputJson);
 
-        if (!fs.existsSync(reportPath)) {
-            return [new ReportNode('Please run PHPwn first', 'placeholder', vscode.TreeItemCollapsibleState.None)];
+            if (!fs.existsSync(reportPath)) {
+                return [new ReportNode('Please run PHPwn first', 'placeholder', vscode.TreeItemCollapsibleState.None)];
+            }
+
+            const report: VulnTypeNode[] = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
+            const srcDir = path.resolve(workspaceRoot, config.target);
+
+            return report.map(vulnTypeNode => this.buildTypeNode(vulnTypeNode, srcDir));
+        } catch (e) {
+            return [new ReportNode(`Failed to load report: ${e}`, 'placeholder', vscode.TreeItemCollapsibleState.None)];
         }
-
-        const report: VulnTypeNode[] = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
-        const srcDir = path.resolve(workspaceRoot, config.target);
-
-        return report.map(vulnTypeNode => this.buildTypeNode(vulnTypeNode, srcDir));
     }
 
     // ── build type node (top level) ───────────────────────────────────────────
