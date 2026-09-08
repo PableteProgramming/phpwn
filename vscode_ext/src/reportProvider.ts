@@ -135,7 +135,9 @@ export class ReportProvider implements vscode.TreeDataProvider<ReportNode> {
     private loadReport(workspaceRoot: string): ReportNode[] {
         const configPath = path.join(workspaceRoot, 'phpwn.config.json');
         if (!fs.existsSync(configPath)) {
-            return [new ReportNode('No phpwn.config.json found', 'placeholder', vscode.TreeItemCollapsibleState.None)];
+            // Not configured yet — return no items so the "not configured" viewsWelcome
+            // content (package.json, when: !phpwn.configured) renders instead.
+            return [];
         }
 
         try {
@@ -143,7 +145,9 @@ export class ReportProvider implements vscode.TreeDataProvider<ReportNode> {
             const reportPath = path.join(workspaceRoot, config.outputDir, config.outputJson);
 
             if (!fs.existsSync(reportPath)) {
-                return [new ReportNode('Please run PHPwn first', 'placeholder', vscode.TreeItemCollapsibleState.None)];
+                // No items — the "Run Analysis" viewsWelcome content
+                // (package.json, when: phpwn.configured) renders instead.
+                return [];
             }
 
             const report: VulnTypeNode[] = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));

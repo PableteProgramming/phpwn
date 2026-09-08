@@ -49,7 +49,8 @@
     "commands": [
       {
         "command": "phpwn.run",
-        "title": "PHPwn: Run Analysis"
+        "title": "PHPwn: Run Analysis",
+        "icon": "$(play)"
       },
       {
         "command": "phpwn.showReport",
@@ -125,6 +126,16 @@
       ],
       "view/title": [
         {
+          "command": "phpwn.run",
+          "when": "view == phpwnResults",
+          "group": "navigation"
+        },
+        {
+          "command": "phpwn.run",
+          "when": "view == phpwnVariables",
+          "group": "navigation"
+        },
+        {
           "command": "phpwn.refreshReport",
           "when": "view == phpwnResults",
           "group": "navigation"
@@ -135,7 +146,29 @@
           "group": "navigation"
         }
       ]
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "phpwnResults",
+        "contents": "PHPwn hasn't been configured for this workspace yet.\n[Configure PHPwn](command:phpwn.configure)",
+        "when": "!phpwn.configured"
+      },
+      {
+        "view": "phpwnVariables",
+        "contents": "PHPwn hasn't been configured for this workspace yet.\n[Configure PHPwn](command:phpwn.configure)",
+        "when": "!phpwn.configured"
+      },
+      {
+        "view": "phpwnResults",
+        "contents": "No analysis results yet.\n[Run Analysis](command:phpwn.run)",
+        "when": "phpwn.configured"
+      },
+      {
+        "view": "phpwnVariables",
+        "contents": "No analysis results yet.\n[Run Analysis](command:phpwn.run)",
+        "when": "phpwn.configured"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

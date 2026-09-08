@@ -98,15 +98,13 @@ export class VariablesProvider implements vscode.TreeDataProvider<VariableNode> 
         return element;
     }
 
-    // returns the children of a variable node. 
+    // returns the children of a variable node.
     // If no node is provided, returns the top-level variables.
     getChildren(element?: VariableNode): VariableNode[] {
         if (!this.varsFilePath || !fs.existsSync(this.varsFilePath)) {
-            return [new VariableNode(
-                // we create a dummy variable node to show an error message in the tree view if the vars file doesn't exist.
-                { name: 'Please run PHPwn first', taint: { xss: true, sql: true }, children: {} },
-                ''
-            )];
+            // No items — the right viewsWelcome content (Configure vs Run Analysis,
+            // package.json, gated on the phpwn.configured context key) renders instead.
+            return [];
         }
         try {
             // we now parse the vars file and create VariableNode objects for each variable.
