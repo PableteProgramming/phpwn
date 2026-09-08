@@ -57,6 +57,17 @@ export function activate(context: vscode.ExtensionContext) {
     const variablesProvider = new VariablesProvider();
     vscode.window.registerTreeDataProvider('phpwnVariables', variablesProvider);
 
+    // Tracks whether phpwn.config.json exists, via a context key used by the
+    // viewsWelcome content in package.json (when: !phpwn.configured / phpwn.configured)
+    // to switch between the "Configure PHPwn" and "Run Analysis" buttons.
+    function updateConfiguredContext(): void {
+        vscode.commands.executeCommand('setContext', 'phpwn.configured', configExists());
+    }
+    updateConfiguredContext();
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeWorkspaceFolders(() => updateConfiguredContext())
+    );
+
     // the PHPwn run Command: this is the main command that runs the PHPwn analysis
     context.subscriptions.push(
         vscode.commands.registerCommand('phpwn.run', async () => {
@@ -180,11 +191,13 @@ export function activate(context: vscode.ExtensionContext) {
             if (fs.existsSync(configPath)) {
                 vscode.window.showInformationMessage('PHPwn: config file already exists.');
                 openConfig();
+                updateConfiguredContext();
             } else {
                 // we call configurePHPwn to create the config file and set up the environment. This function is defined in runner.ts.
                 configurePHPwn(context, workspaceRoot).then(() => {
                     vscode.window.showInformationMessage('PHPwn: Configuration complete! Please run "PHPwn: Run Analysis" to start.');
                     openConfig();
+                    updateConfiguredContext();
                 }).catch(e => {
                     vscode.window.showErrorMessage(`PHPwn: Configuration failed: ${e}`);
                 });
